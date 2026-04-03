@@ -1,0 +1,36 @@
+# IDE
+.idea/
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Build outputs
+Debug/
+Release/
+x64/
+x86/
+[Bb]uild/
+[Oo]ut/
+*.obj
+*.pdb
+*.ilk
+*.exe
+*.dll
+*.lib
+*.exp
+*.log
+*.tlog
+*.idb
+*.ipch
+*.opendb
+*.opensdf
+*.sdf
+*.VC.db
+
+# Claude / OMC
+.claude/
+CLAUDE.md
+TechSpec.md
+.omc/
