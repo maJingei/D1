@@ -18,5 +18,34 @@
     <ClCompile Include="D1ServerCore.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="ThreadManager.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ReadWriteLock.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="MemoryPool.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Types.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ThreadManager.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ReadWriteLock.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="MemoryPool.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Allocator.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ContainerTypes.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
