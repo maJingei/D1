@@ -1,7 +1,5 @@
 #include "MemoryPool.h"
-
 #include <cstdio>
-#include <intrin.h>
 
 namespace D1
 {
@@ -27,8 +25,7 @@ namespace D1
 		int32 LeakCount = AllocCount.load(std::memory_order_relaxed);
 		if (LeakCount != 0)
 		{
-			std::printf("[MemoryPool] LEAK DETECTED: %d blocks (BlockSize=%zu) not returned\n",
-				LeakCount, BlockSize);
+			std::printf("[MemoryPool] LEAK DETECTED: %d blocks (BlockSize=%zu) not returned\n", LeakCount, BlockSize);
 		}
 
 		// MemoryChunk 자체가 VirtualAlloc 영역의 시작 주소이므로 직접 VirtualFree
@@ -65,8 +62,7 @@ namespace D1
 		SizeType ChunkHeaderSize = (sizeof(MemoryChunk) + 15) & ~static_cast<SizeType>(15);
 		SizeType TotalChunkSize = ChunkHeaderSize + TotalBlockSize * BlockCountPerChunk;
 
-		void* RawMemory = VirtualAlloc(nullptr, TotalChunkSize,
-			MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+		void* RawMemory = VirtualAlloc(nullptr, TotalChunkSize,MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
 		assert(RawMemory != nullptr && "VirtualAlloc failed");
 
 		// MemoryChunk를 VirtualAlloc 영역 시작에 carve (별도 new 불필요)
@@ -79,8 +75,7 @@ namespace D1
 		uint8* BlockStart = reinterpret_cast<uint8*>(RawMemory) + ChunkHeaderSize;
 		for (uint32 i = 0; i < BlockCountPerChunk; ++i)
 		{
-			MemoryBlock* Block = reinterpret_cast<MemoryBlock*>(
-				BlockStart + TotalBlockSize * i);
+			MemoryBlock* Block = reinterpret_cast<MemoryBlock*>(BlockStart + TotalBlockSize * i);
 			InterlockedPushEntrySList(&FreeList, &Block->SListEntry);
 		}
 
@@ -93,8 +88,7 @@ namespace D1
 		while (true)
 		{
 			// SLIST Pop은 lock-free (x64 128-bit CAS, ABA-safe)
-			MemoryBlock* Block = reinterpret_cast<MemoryBlock*>(
-				InterlockedPopEntrySList(&FreeList));
+			MemoryBlock* Block = reinterpret_cast<MemoryBlock*>(InterlockedPopEntrySList(&FreeList));
 
 			if (Block != nullptr)
 			{
@@ -132,8 +126,7 @@ namespace D1
 	MemoryBlock* MemoryPool::GetBlockFromUserPtr(void* UserPtr) const
 	{
 		// UserPtr에서 sizeof(MemoryBlock)(=32B) 역산하여 블록 헤더 획득
-		return reinterpret_cast<MemoryBlock*>(
-			reinterpret_cast<uint8*>(UserPtr) - sizeof(MemoryBlock));
+		return reinterpret_cast<MemoryBlock*>(reinterpret_cast<uint8*>(UserPtr) - sizeof(MemoryBlock));
 	}
 
 	void* MemoryPool::GetUserPtrFromBlock(MemoryBlock* Block) const
@@ -151,12 +144,10 @@ namespace D1
 
 	void MemoryPool::ValidateSentinels(MemoryBlock* Block) const
 	{
-		assert(Block->SentinelHead == SENTINEL_HEAD &&
-			"Memory corruption: SentinelHead overwritten");
+		assert(Block->SentinelHead == SENTINEL_HEAD && "Memory corruption: SentinelHead overwritten");
 
 		uint32* Tail = GetSentinelTailPtr(Block);
-		assert(*Tail == SENTINEL_TAIL &&
-			"Memory corruption: SentinelTail overwritten (buffer overflow)");
+		assert(*Tail == SENTINEL_TAIL && "Memory corruption: SentinelTail overwritten (buffer overflow)");
 	}
 
 	uint32* MemoryPool::GetSentinelTailPtr(MemoryBlock* Block) const
@@ -255,8 +246,7 @@ namespace D1
 
 	void* LargeAllocate(SizeType Size)
 	{
-		void* Ptr = VirtualAlloc(nullptr, Size,
-			MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+		void* Ptr = VirtualAlloc(nullptr, Size,MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
 		assert(Ptr != nullptr && "VirtualAlloc failed for large allocation");
 		return Ptr;
 	}

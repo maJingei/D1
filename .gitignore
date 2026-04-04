@@ -29,6 +29,10 @@ x86/
 *.sdf
 *.VC.db
 
+# Build outputs (custom directories)
+Libraries/
+Binary/
+
 # Claude / OMC
 .claude/
 CLAUDE.md

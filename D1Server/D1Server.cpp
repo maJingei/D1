@@ -25,7 +25,7 @@ void TestConcurrentReadersAndWriterExclusion()
 	constexpr int32 ThreadCount = 8;
 	constexpr int32 IterationCount = 10000;
 
-	ThreadManager Manager;
+	ThreadManager& Manager = ThreadManager::GetInstance();
 
 	for (int32 i = 0; i < ThreadCount; ++i)
 	{
@@ -46,6 +46,8 @@ void TestConcurrentReadersAndWriterExclusion()
 	assert(CompletionCount.load() == ThreadCount * IterationCount);
 	assert(SharedCounter == ThreadCount * IterationCount);
 	std::cout << "PASSED (counter=" << SharedCounter << ")" << std::endl;
+
+	Manager.DestroyAllThreads();
 }
 
 /**
@@ -69,7 +71,7 @@ void TestWritePriority()
 		return std::chrono::steady_clock::now().time_since_epoch().count();
 	};
 
-	ThreadManager Manager;
+	ThreadManager& Manager = ThreadManager::GetInstance();
 
 	// Reader1: ReadLock 획득 후 Writer가 대기할 때까지 보유
 	Manager.CreateThread([&]()
@@ -124,6 +126,8 @@ void TestWritePriority()
 	assert(WriterTs > 0 && Reader2Ts > 0);
 	assert(WriterTs < Reader2Ts && "Writer should acquire before Reader2 (Write Priority)");
 	std::cout << "PASSED (Writer before Reader2)" << std::endl;
+
+	Manager.DestroyAllThreads();
 }
 
 /**
@@ -141,7 +145,7 @@ void TestThreadManagerAndWriteReentrant()
 	constexpr int32 CallbackCount = 10;
 
 	{
-		ThreadManager Manager;
+		ThreadManager& Manager = ThreadManager::GetInstance();
 
 		for (int32 i = 0; i < CallbackCount; ++i)
 		{
@@ -153,6 +157,7 @@ void TestThreadManagerAndWriteReentrant()
 
 		Manager.Launch();
 		Manager.JoinAll();
+		Manager.DestroyAllThreads();
 	}
 
 	assert(Counter.load() == CallbackCount);
@@ -223,7 +228,7 @@ void TestMultiThreadAllocFree()
 	std::atomic<int32> TotalAllocs{0};
 	std::atomic<int32> TotalFrees{0};
 
-	ThreadManager Manager;
+	ThreadManager& Manager = ThreadManager::GetInstance();
 
 	for (int32 i = 0; i < ThreadCount; ++i)
 	{
@@ -257,6 +262,8 @@ void TestMultiThreadAllocFree()
 
 	std::cout << "PASSED (" << ThreadCount << " threads x " << AllocsPerThread
 		<< " allocs, no leaks)" << std::endl;
+
+	Manager.DestroyAllThreads();
 }
 
 /**
