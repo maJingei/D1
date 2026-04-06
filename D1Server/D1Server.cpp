@@ -3,9 +3,10 @@
 #include <chrono>
 #include <set>
 
-#include "ThreadManager.h"
-#include "ReadWriteLock.h"
-#include "ContainerTypes.h"
+#include "Threading/ThreadManager.h"
+#include "Threading/ReadWriteLock.h"
+#include "Core/ContainerTypes.h"
+#include "Memory/ObjectPool.h"
 
 using namespace D1;
 
@@ -390,6 +391,99 @@ void TestChunkExpansion()
 	std::cout << "PASSED (" << AllocCount << " allocs across multiple chunks)" << std::endl;
 }
 
+/** ObjectPool 테스트용 구조체. 생성/소멸 추적을 위한 atomic 카운터 사용. */
+struct TestObject
+{
+	int32 Value;
+	static std::atomic<int32> CtorCount;
+	static std::atomic<int32> DtorCount;
+
+	TestObject() : Value(0) { CtorCount.fetch_add(1, std::memory_order_relaxed); }
+	explicit TestObject(int32 InValue) : Value(InValue) { CtorCount.fetch_add(1, std::memory_order_relaxed); }
+	~TestObject() { DtorCount.fetch_add(1, std::memory_order_relaxed); }
+
+	static void ResetCounters() { CtorCount.store(0); DtorCount.store(0); }
+};
+std::atomic<int32> TestObject::CtorCount{0};
+std::atomic<int32> TestObject::DtorCount{0};
+
+/**
+ * 테스트 9: ObjectPool 기본/MakeShared/멀티스레드
+ *
+ * Scenario 1: Pop → 멤버 사용 → Push 후 Ctor/Dtor 카운터 검증
+ * Scenario 2: MakeShared → 스코프 종료 시 자동 반환 + 소멸자 호출 확인
+ * Scenario 3: 8스레드 동시 Pop/Push → Ctor/Dtor 카운터 균형 검증
+ */
+void TestObjectPool()
+{
+	std::cout << "[Test 9] ObjectPool Basic/MakeShared/MultiThread... " << std::flush;
+
+	// Scenario 1: Basic Pop/Push
+	{
+		TestObject::ResetCounters();
+
+		TestObject* Obj = ObjectPool<TestObject>::Pop(42);
+		assert(Obj != nullptr);
+		assert(Obj->Value == 42);
+		assert(TestObject::CtorCount.load() == 1);
+
+		ObjectPool<TestObject>::Push(Obj);
+		assert(TestObject::DtorCount.load() == 1);
+
+		// Push(nullptr) 안전성 확인
+		ObjectPool<TestObject>::Push(nullptr);
+	}
+
+	// Scenario 2: MakeShared Auto-Return
+	{
+		TestObject::ResetCounters();
+
+		{
+			std::shared_ptr<TestObject> Shared = ObjectPool<TestObject>::MakeShared(99);
+			assert(Shared != nullptr);
+			assert(Shared->Value == 99);
+			assert(TestObject::CtorCount.load() == 1);
+			assert(TestObject::DtorCount.load() == 0);
+		}
+		// 스코프 종료 → Deleter → Push → 소멸자 호출
+		assert(TestObject::CtorCount.load() == 1);
+		assert(TestObject::DtorCount.load() == 1);
+	}
+
+	// Scenario 3: Multi-Thread Concurrent Pop/Push
+	{
+		TestObject::ResetCounters();
+		constexpr int32 ThreadCount = 8;
+		constexpr int32 IterationsPerThread = 1000;
+
+		ThreadManager& Manager = ThreadManager::GetInstance();
+
+		for (int32 i = 0; i < ThreadCount; ++i)
+		{
+			Manager.CreateThread([]()
+			{
+				for (int32 j = 0; j < IterationsPerThread; ++j)
+				{
+					TestObject* Obj = ObjectPool<TestObject>::Pop(j);
+					assert(Obj->Value == j);
+					ObjectPool<TestObject>::Push(Obj);
+				}
+			});
+		}
+
+		Manager.Launch();
+		Manager.JoinAll();
+
+		const int32 Expected = ThreadCount * IterationsPerThread;
+		assert(TestObject::CtorCount.load() == Expected);
+		assert(TestObject::DtorCount.load() == Expected);
+
+		Manager.DestroyAllThreads();
+	}
+
+	std::cout << "PASSED (Pop/Push, MakeShared, 8 threads x 1000)" << std::endl;
+}
+
 int main(int argc, char* argv[])
 {
 	// 메인 스레드 TLS 초기화 (ID=1)
@@ -410,6 +504,7 @@ int main(int argc, char* argv[])
 	TestStlContainers();
 	TestStompDetection();
 	TestChunkExpansion();
+	TestObjectPool();
 
 	std::cout << "========================================" << std::endl;
 	std::cout << "  All tests PASSED!" << std::endl;

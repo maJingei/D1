@@ -162,18 +162,19 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="Types.h" />
-    <ClInclude Include="ThreadManager.h" />
-    <ClInclude Include="ReadWriteLock.h" />
-    <ClInclude Include="MemoryPool.h" />
-    <ClInclude Include="Allocator.h" />
-    <ClInclude Include="ContainerTypes.h" />
+    <ClInclude Include="Core\Types.h" />
+    <ClInclude Include="Core\ContainerTypes.h" />
+    <ClInclude Include="Memory\MemoryPool.h" />
+    <ClInclude Include="Memory\Allocator.h" />
+    <ClInclude Include="Memory\ObjectPool.h" />
+    <ClInclude Include="Threading\ThreadManager.h" />
+    <ClInclude Include="Threading\ReadWriteLock.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="D1ServerCore.cpp" />
-    <ClCompile Include="ThreadManager.cpp" />
-    <ClCompile Include="ReadWriteLock.cpp" />
-    <ClCompile Include="MemoryPool.cpp" />
+    <ClCompile Include="Memory\MemoryPool.cpp" />
+    <ClCompile Include="Threading\ThreadManager.cpp" />
+    <ClCompile Include="Threading\ReadWriteLock.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
