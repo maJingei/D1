@@ -164,6 +164,12 @@
   <ItemGroup>
     <ClInclude Include="Core\Types.h" />
     <ClInclude Include="Core\ContainerTypes.h" />
+    <ClInclude Include="Iocp\IocpCore.h" />
+    <ClInclude Include="Iocp\IocpEvent.h" />
+    <ClInclude Include="Iocp\IocpObject.h" />
+    <ClInclude Include="Iocp\SocketUtils.h" />
+    <ClInclude Include="Iocp\Listener.h" />
+    <ClInclude Include="Iocp\Session.h" />
     <ClInclude Include="Memory\MemoryPool.h" />
     <ClInclude Include="Memory\Allocator.h" />
     <ClInclude Include="Memory\ObjectPool.h" />
@@ -172,6 +178,12 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="D1ServerCore.cpp" />
+    <ClCompile Include="Iocp\IocpCore.cpp" />
+    <ClCompile Include="Iocp\IocpEvent.cpp" />
+    <ClCompile Include="Iocp\IocpObject.cpp" />
+    <ClCompile Include="Iocp\SocketUtils.cpp" />
+    <ClCompile Include="Iocp\Listener.cpp" />
+    <ClCompile Include="Iocp\Session.cpp" />
     <ClCompile Include="Memory\MemoryPool.cpp" />
     <ClCompile Include="Threading\ThreadManager.cpp" />
     <ClCompile Include="Threading\ReadWriteLock.cpp" />
