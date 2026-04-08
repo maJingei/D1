@@ -1,4 +1,5 @@
 #include "Session.h"
+#include "Service.h"
 #include "SocketUtils.h"
 #include <iostream>
 
@@ -96,64 +97,81 @@ namespace D1
 	}
 
 	/*-----------------------------------------------------------------*/
-	/*  이벤트 처리                                                     */
+	/*  이벤트 처리 (내부)                                              */
 	/*-----------------------------------------------------------------*/
 
 	void Session::ProcessConnect()
 	{
 		if (bDisconnected) return;
-
 		std::cout << "[Session] Connected" << std::endl;
-
-		// 연결 완료 후 수신 대기 시작
-		RegisterRecv();
+		OnConnected();
 	}
 
 	void Session::ProcessDisconnect()
 	{
 		if (bDisconnected) return;
-
 		bDisconnected = true;
-		std::cout << "[Session] Disconnected" << std::endl;
+
+		// ReleaseSession에서 Sessions에서 제거되어도 이 함수가 끝날 때까지 수명 보장
+		std::shared_ptr<Session> Self = shared_from_this();
 
 		if (Socket != INVALID_SOCKET)
 		{
 			::closesocket(Socket);
 			Socket = INVALID_SOCKET;
 		}
+		OnDisconnected();
+		if (std::shared_ptr<Service> Owner = OwnerService.lock())
+		{
+			Owner->ReleaseSession(Self);
+		}
 	}
 
 	void Session::ProcessRecv(int32 NumOfBytes)
 	{
 		if (bDisconnected) return;
-
 		// 연결 종료 감지
 		if (NumOfBytes == 0)
 		{
-			bDisconnected = true;
-			std::cout << "[Session] Client disconnected (recv 0)" << std::endl;
-			if (Socket != INVALID_SOCKET)
-			{
-				::closesocket(Socket);
-				Socket = INVALID_SOCKET;
-			}
+			ProcessDisconnect();
 			return;
 		}
-
-		// Echo: 수신 데이터를 그대로 송신
-		::memcpy(SendBuffer, RecvBuffer, NumOfBytes);
-		RegisterSend(NumOfBytes);
-		// RegisterRecv는 ProcessSend에서 호출 (SendBuffer 덮어쓰기 방지)
+		OnRecv(NumOfBytes);
 	}
 
 	void Session::ProcessSend(int32 NumOfBytes)
 	{
 		if (bDisconnected) return;
+		OnSend(NumOfBytes);
+	}
 
+	/*-----------------------------------------------------------------*/
+	/*  가상 훅 기본 구현                                               */
+	/*-----------------------------------------------------------------*/
+
+	void Session::OnConnected()
+	{
+		RegisterRecv();
+	}
+
+	void Session::OnRecv(int32 NumOfBytes)
+	{
+		// Echo: 수신 데이터를 그대로 송신
+		::memcpy(SendBuffer, RecvBuffer, NumOfBytes);
+		RegisterSend(NumOfBytes);
+		// RegisterRecv는 OnSend에서 호출 (SendBuffer 덮어쓰기 방지)
+	}
+
+	void Session::OnSend(int32 NumOfBytes)
+	{
 		std::cout << "[Session] Sent " << NumOfBytes << " bytes" << std::endl;
-
 		// 송신 완료 후 다음 수신 등록 (send/recv 직렬화)
 		RegisterRecv();
+	}
+
+	void Session::OnDisconnected()
+	{
+		std::cout << "[Session] Disconnected" << std::endl;
 	}
 
 	/*-----------------------------------------------------------------*/
@@ -163,5 +181,10 @@ namespace D1
 	void Session::SetSocket(SOCKET InSocket)
 	{
 		Socket = InSocket;
+	}
+
+	void Session::SetOwnerService(std::weak_ptr<Service> InService)
+	{
+		OwnerService = InService;
 	}
 }

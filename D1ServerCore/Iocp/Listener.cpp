@@ -1,5 +1,5 @@
 #include "Listener.h"
-#include "IocpCore.h"
+#include "Service.h"
 #include "Session.h"
 #include "SocketUtils.h"
 #include <iostream>
@@ -13,8 +13,6 @@ namespace D1
 
 	Listener::~Listener()
 	{
-		CloseAllSessions();
-
 		if (ListenSocket != INVALID_SOCKET)
 		{
 			::closesocket(ListenSocket);
@@ -33,9 +31,13 @@ namespace D1
 		ProcessAccept();
 	}
 
-	bool Listener::Start(const SOCKADDR_IN& Address, IocpCore* Core)
+	bool Listener::Start(const SOCKADDR_IN& Address, std::weak_ptr<Service> InService)
 	{
-		CoreRef = Core;
+		ServiceRef = InService;
+
+		std::shared_ptr<Service> LockedService = ServiceRef.lock();
+		if (LockedService == nullptr)
+			return false;
 
 		// 소켓 생성
 		ListenSocket = SocketUtils::CreateTcpSocket();
@@ -49,12 +51,11 @@ namespace D1
 		// Bind + Listen
 		if (SocketUtils::Bind(ListenSocket, Address) == false)
 			return false;
-
 		if (SocketUtils::Listen(ListenSocket) == false)
 			return false;
 
 		// IOCP에 Listener 등록
-		if (CoreRef->Register(this) == false)
+		if (LockedService->GetIocpCore()->Register(this) == false)
 			return false;
 
 		// 첫 번째 AcceptEx 게시
@@ -66,23 +67,35 @@ namespace D1
 
 	void Listener::ProcessAccept()
 	{
-		// Step 1: Session 생성 및 소켓 설정
-		Session* NewSession = new Session();
+		std::shared_ptr<Service> LockedService = ServiceRef.lock();
+		if (LockedService == nullptr)
+		{
+			::closesocket(AcceptIocpEvent.ClientSocket);
+			return;
+		}
+
+		// Step 1: Service의 Factory로 Session 생성
+		std::shared_ptr<Session> NewSession = LockedService->CreateSession();
+		if (NewSession == nullptr)
+		{
+			::closesocket(AcceptIocpEvent.ClientSocket);
+			PostAccept();
+			return;
+		}
+
+		// Step 2: 소켓 설정
 		NewSession->SetSocket(AcceptIocpEvent.ClientSocket);
 
-		// Step 2: 클라이언트 소켓 컨텍스트 동기화
+		// Step 3: 클라이언트 소켓 컨텍스트 동기화
 		SocketUtils::SetUpdateAcceptSocket(AcceptIocpEvent.ClientSocket, ListenSocket);
 
-		// Step 3: Session을 IOCP에 등록
-		CoreRef->Register(NewSession);
-
-		// Step 4: 세션 관리
-		Sessions.insert(NewSession);
+		// Step 4: Session을 IOCP에 등록
+		LockedService->GetIocpCore()->Register(NewSession.get());
 
 		// Step 5: 수신 대기 시작
 		NewSession->RegisterRecv();
 
-		std::cout << "[Listener] New client accepted (sessions: " << Sessions.size() << ")" << std::endl;
+		std::cout << "[Listener] New client accepted (sessions: " << LockedService->GetSessionCount() << ")" << std::endl;
 
 		// Step 6: 다음 AcceptEx 게시
 		PostAccept();
@@ -102,17 +115,5 @@ namespace D1
 		{
 			std::cout << "[Listener] AcceptEx failed: " << ::WSAGetLastError() << std::endl;
 		}
-	}
-
-	void Listener::CloseAllSessions()
-	{
-		// TODO: 추후 ServerService로 이전
-		for (Session* Sess : Sessions)
-		{
-			delete Sess;
-		}
-		Sessions.clear();
-
-		std::cout << "[Listener] All sessions closed" << std::endl;
 	}
 }

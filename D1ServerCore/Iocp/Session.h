@@ -1,21 +1,27 @@
 #pragma once
 
 #include <winsock2.h>
+#include <memory>
 #include "IocpObject.h"
 #include "IocpEvent.h"
 
 namespace D1
 {
+	class Service;
+
 	/**
 	 * 개별 클라이언트 연결을 대표하는 세션.
 	 * IocpObject를 상속하여 Connect/Disconnect/Recv/Send 이벤트를 처리한다.
-	 * Echo 서버에서는 수신 데이터를 그대로 송신한다.
+	 * 파생 클래스는 OnConnected/OnRecv/OnSend/OnDisconnected를 오버라이드하여
+	 * 커스텀 동작을 구현한다. 기본 동작은 Echo.
+	 *
+	 * 반드시 std::make_shared로 생성해야 한다. (enable_shared_from_this 요구사항)
 	 */
-	class Session : public IocpObject
+	class Session : public IocpObject, public std::enable_shared_from_this<Session>
 	{
 	public:
 		Session();
-		~Session();
+		virtual ~Session();
 
 		// IocpObject 인터페이스
 		HANDLE GetHandle() override;
@@ -35,15 +41,6 @@ namespace D1
 		void RegisterConnect(const SOCKADDR_IN& Address);
 
 		/*-----------------------------------------------------------------*/
-		/*  이벤트 처리                                                     */
-		/*-----------------------------------------------------------------*/
-
-		void ProcessConnect();
-		void ProcessDisconnect();
-		void ProcessRecv(int32 NumOfBytes);
-		void ProcessSend(int32 NumOfBytes);
-
-		/*-----------------------------------------------------------------*/
 		/*  소켓 관리                                                       */
 		/*-----------------------------------------------------------------*/
 
@@ -51,23 +48,53 @@ namespace D1
 		void SetSocket(SOCKET InSocket);
 		SOCKET GetSocket() const { return Socket; }
 
+		/** 소유 Service를 설정한다. (weak_ptr로 비소유 참조) */
+		void SetOwnerService(std::weak_ptr<Service> InService);
+		std::weak_ptr<Service> GetOwnerService() const { return OwnerService; }
+
+		/** 연결 해제 여부를 반환한다. */
+		bool IsDisconnected() const { return bDisconnected; }
+
 		Session(const Session&) = delete;
 		Session& operator=(const Session&) = delete;
 		Session(Session&&) = delete;
 		Session& operator=(Session&&) = delete;
 
+	protected:
+		/*-----------------------------------------------------------------*/
+		/*  파생 클래스용 가상 훅                                            */
+		/*-----------------------------------------------------------------*/
+
+		/** 연결 완료 후 호출된다. 기본 동작: RegisterRecv() */
+		virtual void OnConnected();
+
+		/** 데이터 수신 시 호출된다. 기본 동작: Echo (RecvBuffer → SendBuffer → RegisterSend) */
+		virtual void OnRecv(int32 NumOfBytes);
+
+		/** 데이터 송신 완료 시 호출된다. 기본 동작: RegisterRecv() */
+		virtual void OnSend(int32 NumOfBytes);
+
+		/** 연결 해제 시 호출된다. 기본 동작: 없음 */
+		virtual void OnDisconnected();
+
+		// 임시 고정 버퍼 (추후 SendBuffer/RecvBuffer 전용 클래스로 교체)
+		char RecvBuffer[4096] = {};
+		char SendBuffer[4096] = {};
+
 	private:
+		void ProcessConnect();
+		void ProcessDisconnect();
+		void ProcessRecv(int32 NumOfBytes);
+		void ProcessSend(int32 NumOfBytes);
+
 		SOCKET Socket = INVALID_SOCKET;
 		bool bDisconnected = false;
+		std::weak_ptr<Service> OwnerService;
 
 		// 4개 IocpEvent 멤버 (각 타입별 1개)
 		RecvEvent RecvIocpEvent;
 		SendEvent SendIocpEvent;
 		ConnectEvent ConnectIocpEvent;
 		DisconnectEvent DisconnectIocpEvent;
-
-		// 임시 고정 버퍼 (추후 SendBuffer/RecvBuffer 전용 클래스로 교체)
-		char RecvBuffer[4096] = {};
-		char SendBuffer[4096] = {};
 	};
 }
