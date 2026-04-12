@@ -1,11 +1,11 @@
 #include "ClientService.h"
-#include "Session.h"
-#include "SocketUtils.h"
+#include "Iocp/Session.h"
+#include "Iocp/SocketUtils.h"
 #include <iostream>
 
 namespace D1
 {
-	std::shared_ptr<Session> ClientService::Connect(const SOCKADDR_IN& Address)
+	std::shared_ptr<Session> ClientService::Connect(const NetAddress& Address)
 	{
 		std::shared_ptr<Session> NewSession = CreateSession();
 		if (NewSession == nullptr)

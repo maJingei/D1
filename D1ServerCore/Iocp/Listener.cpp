@@ -31,7 +31,7 @@ namespace D1
 		ProcessAccept();
 	}
 
-	bool Listener::Start(const SOCKADDR_IN& Address, std::weak_ptr<Service> InService)
+	bool Listener::Start(const NetAddress& Address, std::weak_ptr<Service> InService)
 	{
 		ServiceRef = InService;
 
@@ -49,7 +49,7 @@ namespace D1
 		SocketUtils::SetLinger(ListenSocket, 0, 0);
 
 		// Bind + Listen
-		if (SocketUtils::Bind(ListenSocket, Address) == false)
+		if (SocketUtils::Bind(ListenSocket, Address.GetSockAddr()) == false)
 			return false;
 		if (SocketUtils::Listen(ListenSocket) == false)
 			return false;
@@ -61,7 +61,7 @@ namespace D1
 		// 첫 번째 AcceptEx 게시
 		PostAccept();
 
-		std::cout << "[Listener] Started on port " << ::ntohs(Address.sin_port) << std::endl;
+		std::cout << "[Listener] Started on " << Address.GetIp() << ":" << Address.GetPort() << std::endl;
 		return true;
 	}
 
@@ -103,6 +103,8 @@ namespace D1
 
 	void Listener::PostAccept()
 	{
+		// TODO : 여러개의 AcceptEvent를 통해 여러 세션을 받을 수 있도록 수정 
+		
 		// OVERLAPPED 재초기화
 		AcceptIocpEvent.Init();
 

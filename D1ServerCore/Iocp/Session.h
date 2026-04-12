@@ -4,6 +4,8 @@
 #include <memory>
 #include "IocpObject.h"
 #include "IocpEvent.h"
+#include "NetAddress.h"
+#include "RecvBuffer.h"
 
 namespace D1
 {
@@ -38,7 +40,7 @@ namespace D1
 		void RegisterSend(int32 NumOfBytes);
 
 		/** ConnectEx를 호출하여 서버에 연결한다. (클라이언트 측) */
-		void RegisterConnect(const SOCKADDR_IN& Address);
+		void RegisterConnect(const NetAddress& Address);
 
 		/*-----------------------------------------------------------------*/
 		/*  소켓 관리                                                       */
@@ -68,8 +70,16 @@ namespace D1
 		/** 연결 완료 후 호출된다. 기본 동작: RegisterRecv() */
 		virtual void OnConnected();
 
-		/** 데이터 수신 시 호출된다. 기본 동작: Echo (RecvBuffer → SendBuffer → RegisterSend) */
-		virtual void OnRecv(int32 NumOfBytes);
+		/**
+		 * 데이터 수신 시 호출된다. 파생 클래스는 [Data ~ Data+NumOfBytes) 범위를 파싱하고,
+		 * 완전히 처리한 바이트 수를 반환한다. 미완성 패킷이 남아 있으면 그만큼은 반환하지 않아야
+		 * 다음 수신에서 이어서 파싱할 수 있다.
+		 *
+		 * @param Data        RecvBuffer의 ReadPos 기준 시작 포인터
+		 * @param NumOfBytes  현재 누적된 미처리 바이트 수
+		 * @return            처리 완료 바이트 수 (ReadPos를 그만큼 전진)
+		 */
+		virtual int32 OnRecv(uint8* Data, int32 NumOfBytes);
 
 		/** 데이터 송신 완료 시 호출된다. 기본 동작: RegisterRecv() */
 		virtual void OnSend(int32 NumOfBytes);
@@ -77,8 +87,10 @@ namespace D1
 		/** 연결 해제 시 호출된다. 기본 동작: 없음 */
 		virtual void OnDisconnected();
 
-		// 임시 고정 버퍼 (추후 SendBuffer/RecvBuffer 전용 클래스로 교체)
-		char RecvBuffer[4096] = {};
+		// 수신 스트림 누적 버퍼 (64KB, 커서 기반)
+		RecvBuffer Recv;
+
+		// TODO: Send 경로 Scatter-Gather 개편 시 제거 예정 (Task #5)
 		char SendBuffer[4096] = {};
 
 	private:

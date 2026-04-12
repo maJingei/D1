@@ -2,7 +2,8 @@
 #include <memory>
 
 #include "Iocp/SocketUtils.h"
-#include "Iocp/ServerService.h"
+#include "Iocp/NetAddress.h"
+#include "ServerService.h"
 #include "Iocp/Session.h"
 
 #include "Threading/ThreadManager.h"
@@ -25,10 +26,7 @@ int main(int argc, char* argv[])
 	std::shared_ptr<ServerService> Server = std::make_shared<ServerService>();
 	Server->SetSessionFactory([]() -> std::shared_ptr<Session> { return std::make_shared<Session>(); });
 
-	SOCKADDR_IN Address = {};
-	Address.sin_family = AF_INET;
-	Address.sin_addr.s_addr = ::htonl(INADDR_ANY);
-	Address.sin_port = ::htons(9999);
+	NetAddress Address = NetAddress::AnyAddress(9999);
 
 	if (Server->Start(Address) == false)
 	{

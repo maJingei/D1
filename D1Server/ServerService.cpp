@@ -3,13 +3,13 @@
 
 namespace D1
 {
-	bool ServerService::Start(const SOCKADDR_IN& Address)
+	bool ServerService::Start(const NetAddress& Address)
 	{
 		if (Service::Start() == false)
 			return false;
 		if (ServerListener.Start(Address, weak_from_this()) == false)
 			return false;
-		std::cout << "[ServerService] Started (port " << ::ntohs(Address.sin_port) << ")" << std::endl;
+		std::cout << "[ServerService] Started (" << Address.GetIp() << ":" << Address.GetPort() << ")" << std::endl;
 		return true;
 	}
 

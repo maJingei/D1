@@ -1,6 +1,7 @@
 #pragma once
 
-#include "Service.h"
+#include "Iocp/Service.h"
+#include "Iocp/NetAddress.h"
 
 namespace D1
 {
@@ -17,6 +18,6 @@ namespace D1
 		 * @param Address   연결할 서버 주소
 		 * @return          생성된 Session (실패 시 nullptr)
 		 */
-		std::shared_ptr<Session> Connect(const SOCKADDR_IN& Address);
+		std::shared_ptr<Session> Connect(const NetAddress& Address);
 	};
 }

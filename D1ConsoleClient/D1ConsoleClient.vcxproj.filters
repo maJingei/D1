@@ -13,10 +13,42 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="Game">
+      <UniqueIdentifier>{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Subsystems">
+      <UniqueIdentifier>{B2C3D4E5-F6A7-8901-BCDE-F12345678901}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="D1ConsoleClient.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Game\Game.cpp">
+      <Filter>Game</Filter>
+    </ClCompile>
+    <ClCompile Include="Subsystems\TimeManager.cpp">
+      <Filter>Subsystems</Filter>
+    </ClCompile>
+    <ClCompile Include="Subsystems\InputManager.cpp">
+      <Filter>Subsystems</Filter>
+    </ClCompile>
+    <ClCompile Include="Subsystems\Renderer.cpp">
+      <Filter>Subsystems</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Game\Game.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Subsystems\TimeManager.h">
+      <Filter>Subsystems</Filter>
+    </ClInclude>
+    <ClInclude Include="Subsystems\InputManager.h">
+      <Filter>Subsystems</Filter>
+    </ClInclude>
+    <ClInclude Include="Subsystems\Renderer.h">
+      <Filter>Subsystems</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

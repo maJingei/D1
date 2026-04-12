@@ -171,8 +171,8 @@
     <ClInclude Include="Iocp\Listener.h" />
     <ClInclude Include="Iocp\Session.h" />
     <ClInclude Include="Iocp\Service.h" />
-    <ClInclude Include="Iocp\ServerService.h" />
-    <ClInclude Include="Iocp\ClientService.h" />
+    <ClInclude Include="Iocp\NetAddress.h" />
+    <ClInclude Include="Iocp\RecvBuffer.h" />
     <ClInclude Include="Memory\MemoryPool.h" />
     <ClInclude Include="Memory\Allocator.h" />
     <ClInclude Include="Memory\ObjectPool.h" />
@@ -188,8 +188,8 @@
     <ClCompile Include="Iocp\Listener.cpp" />
     <ClCompile Include="Iocp\Session.cpp" />
     <ClCompile Include="Iocp\Service.cpp" />
-    <ClCompile Include="Iocp\ServerService.cpp" />
-    <ClCompile Include="Iocp\ClientService.cpp" />
+    <ClCompile Include="Iocp\NetAddress.cpp" />
+    <ClCompile Include="Iocp\RecvBuffer.cpp" />
     <ClCompile Include="Memory\MemoryPool.cpp" />
     <ClCompile Include="Threading\ThreadManager.cpp" />
     <ClCompile Include="Threading\ReadWriteLock.cpp" />

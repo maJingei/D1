@@ -168,7 +168,11 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="ServerService.h" />
+  </ItemGroup>
+  <ItemGroup>
     <ClCompile Include="D1Server.cpp" />
+    <ClCompile Include="ServerService.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\D1ServerCore\D1ServerCore.vcxproj">

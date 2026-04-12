@@ -4,6 +4,7 @@
 #include <memory>
 #include "IocpObject.h"
 #include "IocpEvent.h"
+#include "NetAddress.h"
 
 namespace D1
 {
@@ -32,7 +33,7 @@ namespace D1
 		 * @param InService  Session 생성 및 IOCP 등록에 사용할 Service (weak 참조)
 		 * @return           시작 성공 여부
 		 */
-		bool Start(const SOCKADDR_IN& Address, std::weak_ptr<Service> InService);
+		bool Start(const NetAddress& Address, std::weak_ptr<Service> InService);
 
 		/** Accept 완료 처리: Session 생성 → IOCP 등록 → Recv 시작 → 새 AcceptEx 게시 */
 		void ProcessAccept();
