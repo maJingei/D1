@@ -5,9 +5,9 @@
 
 namespace D1
 {
-	std::shared_ptr<Session> ClientService::Connect(const NetAddress& Address)
+	SessionRef ClientService::Connect(const NetAddress& Address)
 	{
-		std::shared_ptr<Session> NewSession = CreateSession();
+		SessionRef NewSession = CreateSession();
 		if (NewSession == nullptr)
 			return nullptr;
 

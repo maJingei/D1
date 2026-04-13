@@ -1,6 +1,7 @@
 #include "IocpCore.h"
 #include "IocpObject.h"
 #include "IocpEvent.h"
+#include <cassert>
 
 namespace D1
 {
@@ -41,30 +42,60 @@ namespace D1
 
 		BOOL bSuccess = ::GetQueuedCompletionStatus(IocpHandle, &NumOfBytes, &Key, &Overlapped, TimeoutMs);
 
-		// 종료 신호: PQCS(0, 0, nullptr)가 성공적으로 dequeue된 경우에만 종료
-		// bSuccess 체크 필수: GQCS 타임아웃 시 Key==0이지만 bSuccess==FALSE이므로 구분 가능
+		// 반환값 계약:
+		//   true  = 이번 호출에서 실제 이벤트(정상/에러) 하나를 처리했다
+		//   false = 처리할 이벤트가 없었다 (종료 신호 수신 또는 GQCS 타임아웃)
+		// 이 계약은 non-blocking 드레인(while(Dispatch(0)) {})과
+		// blocking 워커 루프(while(Dispatch()) {} with INFINITE)를 모두 만족시킨다.
+
+		// 종료 신호: PQCS(0, 0, nullptr)가 성공적으로 dequeue된 경우
 		if (bSuccess == TRUE && Key == 0 && Overlapped == nullptr)
 		{
 			return false;
 		}
 
+		// Key는 non-authoritative. Event->Owner가 수명 권위 소스.
+		// Key는 향후 per-object ID / GetQueuedCompletionStatusEx 배치 경로용으로 시그니처만 보존.
+
 		if (bSuccess == TRUE && Overlapped != nullptr)
 		{
-			// 성공: OVERLAPPED → IocpEvent, Key → IocpObject
+			// 성공 경로: OVERLAPPED → IocpEvent.
+			// Event->Owner를 move로 KeepAlive 스택 로컬로 옮겨 Dispatch 실행 구간 수명 보장.
+			// self-cycle(Session→Event→shared_ptr<Session>)은 이 move로 해제된다.
 			IocpEvent* Event = static_cast<IocpEvent*>(Overlapped);
-			IocpObject* Object = reinterpret_cast<IocpObject*>(Key);
-			Object->Dispatch(Event, static_cast<int32>(NumOfBytes));
+			IocpObjectRef KeepAlive = std::move(Event->Owner);
+#ifdef _DEBUG
+			assert(KeepAlive); // HoldForIo 규약 위반 또는 Owner.reset 오남용 감지
+#endif
+			if (!KeepAlive)
+			{
+				// Release 안전망: late/orphan completion은 조용히 흡수한다.
+				return true;
+			}
+			KeepAlive->Dispatch(Event, static_cast<int32>(NumOfBytes));
+			return true;
 		}
-		else if (bSuccess == FALSE && Overlapped != nullptr)
-		{
-			// GQCS 실패 + Overlapped 유효: I/O 에러 (연결 종료 등)
-			// NumOfBytes=0으로 Dispatch 호출하여 상위에서 에러 처리
-			IocpEvent* Event = static_cast<IocpEvent*>(Overlapped);
-			IocpObject* Object = reinterpret_cast<IocpObject*>(Key);
-			Object->Dispatch(Event, 0);
-		}
-		// else: bSuccess == FALSE && Overlapped == nullptr → GQCS 자체 실패 (타임아웃 등), 무시하고 계속
 
-		return true;
+		if (bSuccess == FALSE && Overlapped != nullptr)
+		{
+			// 에러 경로: I/O 에러(연결 종료 등). 동일한 KeepAlive 패턴 적용.
+			// NumOfBytes=0으로 Dispatch 호출하여 상위에서 에러 처리.
+			IocpEvent* Event = static_cast<IocpEvent*>(Overlapped);
+			IocpObjectRef KeepAlive = std::move(Event->Owner);
+#ifdef _DEBUG
+			assert(KeepAlive);
+#endif
+			if (!KeepAlive)
+			{
+				return true;
+			}
+			KeepAlive->Dispatch(Event, 0);
+			return true;
+		}
+
+		// bSuccess == FALSE && Overlapped == nullptr
+		// → GQCS 자체 실패 (대표적으로 WAIT_TIMEOUT). 이번 호출에서 처리한 이벤트 없음.
+		// non-blocking 드레인 호출자는 이걸 받아 루프를 빠져나가야 UI 메시지 루프 등으로 되돌아갈 수 있다.
+		return false;
 	}
 }

@@ -4,7 +4,6 @@ namespace D1
 {
 	IocpEvent::IocpEvent(EventType InType)
 		: Type(InType)
-		, Owner(nullptr)
 	{
 		Init();
 	}

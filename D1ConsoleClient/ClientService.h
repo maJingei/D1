@@ -18,6 +18,6 @@ namespace D1
 		 * @param Address   연결할 서버 주소
 		 * @return          생성된 Session (실패 시 nullptr)
 		 */
-		std::shared_ptr<Session> Connect(const NetAddress& Address);
+		SessionRef Connect(const NetAddress& Address);
 	};
 }

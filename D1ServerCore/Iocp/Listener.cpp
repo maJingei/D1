@@ -6,10 +6,7 @@
 
 namespace D1
 {
-	Listener::Listener()
-	{
-		AcceptIocpEvent.Owner = this;
-	}
+	Listener::Listener() = default;
 
 	Listener::~Listener()
 	{
@@ -33,9 +30,9 @@ namespace D1
 
 	bool Listener::Start(const NetAddress& Address, std::weak_ptr<Service> InService)
 	{
-		ServiceRef = InService;
+		OwnerService = InService;
 
-		std::shared_ptr<Service> LockedService = ServiceRef.lock();
+		ServiceRef LockedService = OwnerService.lock();
 		if (LockedService == nullptr)
 			return false;
 
@@ -65,17 +62,40 @@ namespace D1
 		return true;
 	}
 
+	void Listener::Shutdown()
+	{
+		if (ListenSocket == INVALID_SOCKET)
+			return;
+		// closesocket은 pending AcceptEx를 WSA_OPERATION_ABORTED로 완료시킨다.
+		// ListenSocket을 즉시 INVALID_SOCKET으로 돌려 ProcessAccept가 abort임을 감지하도록 한다.
+		::closesocket(ListenSocket);
+		ListenSocket = INVALID_SOCKET;
+	}
+
 	void Listener::ProcessAccept()
 	{
-		std::shared_ptr<Service> LockedService = ServiceRef.lock();
+		// 셧다운 중이면 abort된 AcceptEx 완료이므로 세션 생성/재게시를 건너뛴다.
+		// 미리 할당한 클라이언트 소켓만 안전하게 해제한다.
+		if (ListenSocket == INVALID_SOCKET)
+		{
+			if (AcceptIocpEvent.ClientSocket != INVALID_SOCKET)
+			{
+				::closesocket(AcceptIocpEvent.ClientSocket);
+				AcceptIocpEvent.ClientSocket = INVALID_SOCKET;
+			}
+			return;
+		}
+
+		ServiceRef LockedService = OwnerService.lock();
 		if (LockedService == nullptr)
 		{
 			::closesocket(AcceptIocpEvent.ClientSocket);
+			AcceptIocpEvent.ClientSocket = INVALID_SOCKET;
 			return;
 		}
 
 		// Step 1: Service의 Factory로 Session 생성
-		std::shared_ptr<Session> NewSession = LockedService->CreateSession();
+		SessionRef NewSession = LockedService->CreateSession();
 		if (NewSession == nullptr)
 		{
 			::closesocket(AcceptIocpEvent.ClientSocket);
@@ -103,10 +123,10 @@ namespace D1
 
 	void Listener::PostAccept()
 	{
-		// TODO : 여러개의 AcceptEvent를 통해 여러 세션을 받을 수 있도록 수정 
-		
-		// OVERLAPPED 재초기화
-		AcceptIocpEvent.Init();
+		// TODO : 여러개의 AcceptEvent를 통해 여러 세션을 받을 수 있도록 수정
+
+		// HoldForIo가 Owner 세팅과 Event.Init()을 함께 수행한다.
+		HoldForIo(AcceptIocpEvent);
 
 		// 클라이언트 소켓 미리 생성
 		AcceptIocpEvent.ClientSocket = SocketUtils::CreateTcpSocket();
@@ -116,6 +136,10 @@ namespace D1
 		if (Result == FALSE && ::WSAGetLastError() != WSA_IO_PENDING)
 		{
 			std::cout << "[Listener] AcceptEx failed: " << ::WSAGetLastError() << std::endl;
+			// 게시 실패: HoldForIo가 잡아둔 self-ref + 미사용 수용 소켓을 즉시 해제한다.
+			AcceptIocpEvent.Owner.reset();
+			::closesocket(AcceptIocpEvent.ClientSocket);
+			AcceptIocpEvent.ClientSocket = INVALID_SOCKET;
 		}
 	}
 }

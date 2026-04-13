@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <atomic>
 #include <functional>
+#include <memory>
 #include <thread>
 #include <string>
 #include <vector>
@@ -53,4 +54,35 @@ namespace D1
 
 	/** 초기화되지 않은 ThreadID 센티넬 값 (ThreadIdCounter는 1부터 시작) */
 	constexpr uint32 INVALID_THREAD_ID = 0;
+
+	/** 스마트 포인터 alias */
+	class IocpObject;
+	using IocpObjectRef = std::shared_ptr<IocpObject>;
+
+	class Session;
+	using SessionRef = std::shared_ptr<Session>;
+
+	class PacketSession;
+	using PacketSessionRef = std::shared_ptr<PacketSession>;
+
+	class Listener;
+	using ListenerRef = std::shared_ptr<Listener>;
+
+	class Service;
+	using ServiceRef = std::shared_ptr<Service>;
+
+	class ServerService;
+	using ServerServiceRef = std::shared_ptr<ServerService>;
+
+	class ClientService;
+	using ClientServiceRef = std::shared_ptr<ClientService>;
+
+	class SendBufferChunk;
+	using SendBufferChunkRef = std::shared_ptr<SendBufferChunk>;
+
+	class SendBuffer;
+	using SendBufferRef = std::shared_ptr<SendBuffer>;
 }
+
+// D1 네임스페이스 타입을 전역으로 노출 (UE 스타일 컨벤션)
+using namespace D1;

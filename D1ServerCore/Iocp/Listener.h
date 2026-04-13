@@ -41,6 +41,13 @@ namespace D1
 		/** AcceptEx를 게시한다. (WSASocket으로 클라이언트 소켓 미리 생성) */
 		void PostAccept();
 
+		/**
+		 * Listen 소켓을 닫아 pending AcceptEx를 abort 완료로 drain한다.
+		 * 이후 ProcessAccept는 abort 완료를 감지해 세션 생성/재게시를 건너뛴다.
+		 * ServerService::Stop에서만 호출된다.
+		 */
+		void Shutdown();
+
 		Listener(const Listener&) = delete;
 		Listener& operator=(const Listener&) = delete;
 		Listener(Listener&&) = delete;
@@ -50,6 +57,6 @@ namespace D1
 		SOCKET ListenSocket = INVALID_SOCKET;
 		AcceptEvent AcceptIocpEvent;
 		char AcceptBuffer[64] = {};           // AcceptEx 주소 버퍼 (비동기 완료까지 유지 필수)
-		std::weak_ptr<Service> ServiceRef;
+		std::weak_ptr<Service> OwnerService;
 	};
 }

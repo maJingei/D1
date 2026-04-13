@@ -1,11 +1,14 @@
 #pragma once
 
 #include <winsock2.h>
+#include <memory>
+#include <vector>
 #include "../Core/Types.h"
 
 namespace D1
 {
 	class IocpObject;
+	class SendBuffer;
 
 	/** IOCP 이벤트 타입을 구분하는 열거형. */
 	enum class EventType : uint8
@@ -39,8 +42,12 @@ namespace D1
 		/** 이벤트 종류 */
 		EventType Type;
 
-		/** 이 이벤트를 소유한 객체 (비소유 포인터) */
-		IocpObject* Owner = nullptr;
+		/**
+		 * 이 이벤트의 비동기 I/O 수명을 연장하는 강참조.
+		 * HoldForIo(Event)에서 set, IocpCore::Dispatch 진입 시 std::move로 reset.
+		 * 따라서 존재 구간은 "I/O 게시 ~ 완료 Dispatch 진입"까지만이다.
+		 */
+		IocpObjectRef Owner;
 	};
 
 	/** 서버→외부 연결 요청 이벤트 */
@@ -74,10 +81,17 @@ namespace D1
 		RecvEvent() : IocpEvent(EventType::Recv) {}
 	};
 
-	/** 데이터 송신 이벤트 */
+	/**
+	 * 데이터 송신 이벤트.
+	 * WSASend가 진행 중인 동안 전송 대상 SendBuffer들의 shared_ptr을 보관하여
+	 * Chunk/버퍼 메모리의 생명주기를 연장한다. 송신 완료(ProcessSend) 시 clear.
+	 */
 	class SendEvent : public IocpEvent
 	{
 	public:
 		SendEvent() : IocpEvent(EventType::Send) {}
+
+		/** 현재 WSASend에 참여 중인 SendBuffer들. 완료 시 비워진다. */
+		std::vector<SendBufferRef> SendBuffers;
 	};
 }

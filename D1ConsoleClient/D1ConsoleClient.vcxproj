@@ -115,14 +115,20 @@
       <LanguageStandard>stdcpp17</LanguageStandard>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>$(SolutionDir)D1ServerCore;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)D1ServerCore;$(SolutionDir)Libraries\Include;$(SolutionDir)Common;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>$(SolutionDir)Libraries\Libs\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>D1ServerCore.lib;Synchronization.lib;ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(SolutionDir)Libraries\Libs\ServerCore\$(Configuration);$(SolutionDir)Libraries\Libs\ProtoBuf\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>D1ServerCore.lib;libprotobufd.lib;Synchronization.lib;ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
+    <PreBuildEvent>
+      <Command>IF EXIST "$(SolutionDir)Common\protoBuf\Protocol.proto" ("$(SolutionDir)Tools\PacketGenerator\GenPacket.exe" --path "$(SolutionDir)Common\protoBuf\Protocol.proto" --output "$(ProjectDir)ServerPacketHandler" --recv S_ --send C_)</Command>
+    </PreBuildEvent>
+    <PostBuildEvent>
+      <Command>xcopy /y "$(SolutionDir)Libraries\Libs\ProtoBuf\Debug\libprotobufd.dll" "$(OutDir)"</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
@@ -156,34 +162,61 @@
       <LanguageStandard>stdcpp17</LanguageStandard>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>$(SolutionDir)D1ServerCore;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)D1ServerCore;$(SolutionDir)Libraries\Include;$(SolutionDir)Common;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>$(SolutionDir)Libraries\Libs\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>D1ServerCore.lib;Synchronization.lib;ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(SolutionDir)Libraries\Libs\ServerCore\$(Configuration);$(SolutionDir)Libraries\Libs\ProtoBuf\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>D1ServerCore.lib;libprotobuf.lib;Synchronization.lib;ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
+    <PreBuildEvent>
+      <Command>IF EXIST "$(SolutionDir)Common\protoBuf\Protocol.proto" ("$(SolutionDir)Tools\PacketGenerator\GenPacket.exe" --path "$(SolutionDir)Common\protoBuf\Protocol.proto" --output "$(ProjectDir)ServerPacketHandler" --recv S_ --send C_)</Command>
+    </PreBuildEvent>
+    <PostBuildEvent>
+      <Command>xcopy /y "$(SolutionDir)Libraries\Libs\ProtoBuf\Release\libprotobuf.dll" "$(OutDir)"</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="D1ConsoleClient.cpp" />
     <ClCompile Include="Game\Game.cpp" />
+    <ClCompile Include="Game\Actor\APlayerActor.cpp" />
+    <ClCompile Include="Game\World\UWorld.cpp" />
+    <ClCompile Include="Game\World\UTileMap.cpp" />
     <ClCompile Include="Subsystems\TimeManager.cpp" />
     <ClCompile Include="Subsystems\InputManager.cpp" />
     <ClCompile Include="Subsystems\Renderer.cpp" />
+    <ClCompile Include="Subsystems\Texture.cpp" />
+    <ClCompile Include="Subsystems\ResourceManager.cpp" />
+    <ClCompile Include="ClientService.cpp" />
+    <ClCompile Include="ServerPacketHandler.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Game\FVector2D.h" />
     <ClInclude Include="Game\Game.h" />
+    <ClInclude Include="Game\Actor\AActor.h" />
+    <ClInclude Include="Game\Actor\APlayerActor.h" />
+    <ClInclude Include="Game\World\UWorld.h" />
+    <ClInclude Include="Game\World\UTileMap.h" />
     <ClInclude Include="Subsystems\TimeManager.h" />
     <ClInclude Include="Subsystems\InputManager.h" />
     <ClInclude Include="Subsystems\Renderer.h" />
+    <ClInclude Include="Subsystems\Texture.h" />
+    <ClInclude Include="Subsystems\ResourceManager.h" />
+    <ClInclude Include="ClientService.h" />
+    <ClInclude Include="ServerPacketHandler.h" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\D1ServerCore\D1ServerCore.vcxproj">
       <Project>{9A07D2F2-554A-47AA-876B-F12717CA42E6}</Project>
     </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="$(SolutionDir)Common\protoBuf\Protocol.proto" />
+    <None Include="$(SolutionDir)Common\Protocol.pb.h" />
+    <None Include="$(SolutionDir)GenPackets.bat" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

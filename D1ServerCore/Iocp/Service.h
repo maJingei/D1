@@ -19,7 +19,7 @@ namespace D1
 	class Service : public std::enable_shared_from_this<Service>
 	{
 	public:
-		using SessionFactory = std::function<std::shared_ptr<Session>()>;
+		using SessionFactory = std::function<SessionRef()>;
 
 		Service();
 		virtual ~Service();
@@ -34,10 +34,10 @@ namespace D1
 		void SetSessionFactory(SessionFactory InFactory);
 
 		/** 팩토리를 사용하여 Session을 생성하고 목록에 추가한다. */
-		std::shared_ptr<Session> CreateSession();
+		SessionRef CreateSession();
 
 		/** Session을 목록에서 제거한다. shared_ptr 해제로 자동 소멸된다. */
-		void ReleaseSession(std::shared_ptr<Session> Target);
+		void ReleaseSession(SessionRef Target);
 
 		/** IocpCore 포인터를 반환한다. */
 		IocpCore* GetIocpCore() { return &Core; }
@@ -52,7 +52,7 @@ namespace D1
 
 	protected:
 		IocpCore Core;
-		Set<std::shared_ptr<Session>> Sessions;
+		Set<SessionRef> Sessions;
 		SessionFactory Factory;
 	};
 }

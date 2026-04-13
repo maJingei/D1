@@ -31,20 +31,20 @@ namespace D1
 		Factory = InFactory;
 	}
 
-	std::shared_ptr<Session> Service::CreateSession()
+	SessionRef Service::CreateSession()
 	{
 		if (Factory == nullptr)
 		{
 			std::cout << "[Service] SessionFactory not set!" << std::endl;
 			return nullptr;
 		}
-		std::shared_ptr<Session> NewSession = Factory();
+		SessionRef NewSession = Factory();
 		NewSession->SetOwnerService(weak_from_this());
 		Sessions.insert(NewSession);
 		return NewSession;
 	}
 
-	void Service::ReleaseSession(std::shared_ptr<Session> Target)
+	void Service::ReleaseSession(SessionRef Target)
 	{
 		Sessions.erase(Target);
 	}
