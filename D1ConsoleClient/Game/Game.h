@@ -20,13 +20,23 @@ namespace D1
 	class UWorld;
 
 	/**
-	 * 게임 클라이언트의 메인 싱글톤.
-	 * 윈도우 생성, 게임 루프, 서브시스템 관리를 담당한다.
+	 * 게임 클라이언트의 메인 객체.
+	 * WinMain 이 스택에 1개를 들고 윈도우 생성·게임 루프·서브시스템 수명을 관리한다.
+	 *
+	 * 스택 객체로 둔 이유:
+	 *  - 정적 싱글톤(Game) → 정적 싱글톤(Renderer/ResourceManager 등) 의 destruction 순서가
+	 *    역순이라, ~Game() 의 Shutdown 안전망이 이미 파괴된 서브시스템에 접근해 크래시한다.
+	 *  - 스택에 두면 WinMain 종료 시점에 서브시스템들의 정적 dtor 보다 먼저 ~Game() 이 호출돼
+	 *    안전하게 Shutdown 을 수행할 수 있다.
 	 */
 	class Game
 	{
 	public:
-		static Game& Get();
+		// 생성자/소멸자는 cpp 에 정의 — std::unique_ptr<UWorld> 의 incomplete type 문제 회피.
+		Game();
+		~Game();
+		Game(const Game&) = delete;
+		Game& operator=(const Game&) = delete;
 
 		/** Client Session의 OnRecv에서 호출: 수신 텍스트를 저장해 타이틀에 반영한다. */
 		void OnEchoReceived(const uint8* Data, int32 NumOfBytes);
@@ -46,10 +56,6 @@ namespace D1
 		void Shutdown();
 
 	private:
-		Game() = default;
-		~Game();
-		Game(const Game&) = delete;
-		Game& operator=(const Game&) = delete;
 
 		void BeginPlay();
 		void Tick(float DeltaTime);

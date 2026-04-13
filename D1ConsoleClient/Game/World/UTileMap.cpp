@@ -2,7 +2,7 @@
 #include "../../Subsystems/Texture.h"
 #include "../../Subsystems/ResourceManager.h"
 
-#pragma comment(lib, "msimg32.lib") // AlphaBlend
+#include <gdiplus.h>
 
 #include <fstream>
 #include <sstream>
@@ -10,6 +10,9 @@
 
 namespace D1
 {
+	UTileMap::UTileMap() = default;
+	UTileMap::~UTileMap() = default;
+
 	bool UTileMap::Load(const std::wstring& CsvPath, const std::wstring& TilesetName, int32 InTileColumns, int32 InTileSize)
 	{
 		TileColumns = InTileColumns;
@@ -37,11 +40,14 @@ namespace D1
 			std::string Token;
 			while (std::getline(Stream, Token, ','))
 			{
-				// Tiled CSV는 1-based ID. 0은 빈 타일.
+				// 본 프로젝트 CSV 규약: -1 = 빈 타일, 0+ = 0-based 타일 ID
 				Row.push_back(std::stoi(Token));
 			}
 			TileIndices.push_back(std::move(Row));
 		}
+
+		// CSV가 다시 로드되면 캐시도 무효화
+		CachedMap.reset();
 		return !TileIndices.empty();
 	}
 
@@ -50,36 +56,52 @@ namespace D1
 		if (!TilesetTexture)
 			return;
 
-		// 타일셋 DIBSection을 선택한 임시 DC 생성
-		HDC TilesetDC = ::CreateCompatibleDC(BackDC);
-		HBITMAP OldBitmap = static_cast<HBITMAP>(::SelectObject(TilesetDC, TilesetTexture->GetBitmap()));
+		// 최초 호출에서 한 번만 캐시를 만든다 — 이후 프레임은 그대로 재사용 (고정 화면 가정).
+		if (!CachedMap)
+			BuildCache();
 
-		// AlphaBlend: 프리멀티플라이드 알파(AC_SRC_ALPHA)로 픽셀 단위 투명 합성
-		BLENDFUNCTION Blend = {};
-		Blend.BlendOp             = AC_SRC_OVER;
-		Blend.BlendFlags          = 0;
-		Blend.SourceConstantAlpha = 255;
-		Blend.AlphaFormat         = AC_SRC_ALPHA;
+		if (!CachedMap)
+			return;
 
-		for (int32 Row = 0; Row < static_cast<int32>(TileIndices.size()); Row++)
+		// 캐시 비트맵을 백버퍼로 1회 출력. PARGB 캐시이므로 알파 보존.
+		Gdiplus::Graphics G(BackDC);
+		G.SetPageUnit(Gdiplus::UnitPixel);
+		G.DrawImage(CachedMap.get(), 0, 0, static_cast<INT>(CachedMap->GetWidth()), static_cast<INT>(CachedMap->GetHeight()));
+	}
+
+	void UTileMap::BuildCache()
+	{
+		Gdiplus::Bitmap* Tileset = TilesetTexture->GetBitmap();
+		if (!Tileset || TileIndices.empty())
+			return;
+
+		// 캐시 크기: 첫 행의 열 수를 맵 가로로 사용 (정형 격자 가정).
+		const int32 MapCols = static_cast<int32>(TileIndices[0].size());
+		const int32 MapRows = static_cast<int32>(TileIndices.size());
+		const INT   PixelW  = static_cast<INT>(MapCols * TileSize);
+		const INT   PixelH  = static_cast<INT>(MapRows * TileSize);
+
+		// PARGB 포맷으로 알파를 보존하면서 합성. 초기 픽셀은 투명(0,0,0,0)이라 빈 타일은 비워진 상태가 된다.
+		CachedMap = std::make_unique<Gdiplus::Bitmap>(PixelW, PixelH, PixelFormat32bppPARGB);
+
+		Gdiplus::Graphics G(CachedMap.get());
+		G.SetPageUnit(Gdiplus::UnitPixel);
+
+		for (int32 Row = 0; Row < MapRows; Row++)
 		{
 			for (int32 Col = 0; Col < static_cast<int32>(TileIndices[Row].size()); Col++)
 			{
 				int32 Id = TileIndices[Row][Col];
 				if (Id < 0)
-					continue; // -1은 빈 타일
+					continue;
 
 				int32 SrcX = (Id % TileColumns) * TileSize;
 				int32 SrcY = (Id / TileColumns) * TileSize;
 				int32 DstX = Col * TileSize;
 				int32 DstY = Row * TileSize;
 
-				::AlphaBlend(BackDC, DstX, DstY, TileSize, TileSize,
-					TilesetDC, SrcX, SrcY, TileSize, TileSize, Blend);
+				G.DrawImage(Tileset, DstX, DstY, SrcX, SrcY, TileSize, TileSize, Gdiplus::UnitPixel);
 			}
 		}
-
-		::SelectObject(TilesetDC, OldBitmap);
-		::DeleteDC(TilesetDC);
 	}
 }

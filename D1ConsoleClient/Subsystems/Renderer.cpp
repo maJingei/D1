@@ -4,8 +4,15 @@ namespace D1
 {
 	Renderer& Renderer::Get()
 	{
-		static Renderer* Instance = new Renderer();
-		return *Instance;
+		// Meyers singleton: 프로세스 종료 시 dtor가 자동 호출되어 GDI 리소스를 해제한다.
+		static Renderer Instance;
+		return Instance;
+	}
+
+	Renderer::~Renderer()
+	{
+		// 명시적 Shutdown 누락 시 안전망. Shutdown은 멱등이므로 중복 호출 무해.
+		Shutdown();
 	}
 
 	bool Renderer::Initialize(HWND InHWnd, int32 InWidth, int32 InHeight)

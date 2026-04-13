@@ -28,12 +28,20 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	PoolManager::GetInstance().Initialize(64);
 	SocketUtils::Init();
 
-	if (Game::Get().Initialize(hInstance))
+	// Game 은 스택 객체로 둔다. 정적 싱글톤으로 만들면 정적 dtor 호출 순서가
+	// 서브시스템(Renderer/ResourceManager 등)보다 늦어 ~Game()→Shutdown() 시점에
+	// 이미 파괴된 서브시스템에 접근해 크래시한다. 스택에 두면 이 블록 종료 시점에
+	// ~Game() 이 호출되며 그때 서브시스템들의 정적 dtor 는 아직 실행되지 않은 상태다.
 	{
-		Game::Get().Run();
+		Game GameInstance;
+		if (GameInstance.Initialize(hInstance))
+		{
+			GameInstance.Run();
+			GameInstance.Shutdown();
+		}
+		// Initialize 실패 시에는 Game::Initialize 내부에서 부분 초기화 롤백 완료.
+		// 정상/실패 모두 ~Game() 이 안전망으로 Shutdown 을 한 번 더 호출(멱등).
 	}
-
-	Game::Get().Shutdown();
 	SocketUtils::Cleanup();
 
 	// 메인 스레드 TLS SendBufferChunk를 명시적으로 반환한다.

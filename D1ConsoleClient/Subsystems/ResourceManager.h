@@ -10,6 +10,7 @@
 namespace D1
 {
 	class Texture;
+	class UCollisionMap;
 
 	/** 텍스처 등록 항목. 이름-파일경로 쌍. */
 	struct FTextureEntry
@@ -42,6 +43,9 @@ namespace D1
 		static const FTileLayerEntry TileLayerEntries[];
 		static const int32 TileLayerEntryCount;
 
+		/** 충돌 맵 CSV 경로 (0=통행, 1=차단). 렌더링하지 않는 논리 전용 레이어. */
+		static const wchar_t* const CollisionMapPath;
+
 	public:
 		static ResourceManager& Get();
 
@@ -69,9 +73,17 @@ namespace D1
 		 */
 		std::shared_ptr<Texture> GetTexture(const std::wstring& Name);
 
+		/**
+		 * 충돌 맵 CSV(CollisionMapPath)를 로드하여 UCollisionMap 인스턴스를 생성한다.
+		 * 캐싱하지 않으며, 호출자가 소유권을 받아 UWorld 등에 주입한다.
+		 *
+		 * @return  로드 성공 시 UCollisionMap, 실패 시 nullptr.
+		 */
+		std::shared_ptr<UCollisionMap> LoadCollisionMap();
+
 	private:
 		ResourceManager() = default;
-		~ResourceManager() = default;
+		~ResourceManager();
 		ResourceManager(const ResourceManager&) = delete;
 		ResourceManager& operator=(const ResourceManager&) = delete;
 

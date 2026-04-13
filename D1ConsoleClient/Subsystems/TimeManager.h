@@ -30,7 +30,7 @@ namespace D1
 
 	private:
 		TimeManager() = default;
-		~TimeManager() = default;
+		~TimeManager();
 		TimeManager(const TimeManager&) = delete;
 		TimeManager& operator=(const TimeManager&) = delete;
 

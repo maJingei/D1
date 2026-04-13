@@ -1,5 +1,6 @@
 #include "ResourceManager.h"
 #include "Texture.h"
+#include "../Game/World/UCollisionMap.h"
 
 #include <gdiplus.h>
 
@@ -12,6 +13,7 @@ namespace D1
 	const FTextureEntry ResourceManager::TextureEntries[] =
 	{
 		{ L"ArenaTileset", L"../Resource/Arena Tileset.png" },
+		{ L"PlayerSprite", L"../Resource/Adventurer Sprite Sheet v1.6.png" },
 	};
 	const int32 ResourceManager::TextureEntryCount = static_cast<int32>(std::size(TextureEntries));
 
@@ -24,12 +26,22 @@ namespace D1
 	};
 	const int32 ResourceManager::TileLayerEntryCount = static_cast<int32>(std::size(TileLayerEntries));
 
+	// 충돌 전용 CSV (0=통행, 1=차단). 렌더 레이어와 독립적으로 1회 로드.
+	const wchar_t* const ResourceManager::CollisionMapPath = L"../Resource/Collision_Collision.csv";
+
 	/*-----------------------------------------------------------------*/
 
 	ResourceManager& ResourceManager::Get()
 	{
-		static ResourceManager* Instance = new ResourceManager();
-		return *Instance;
+		// Meyers singleton: dtor가 자동 호출되어 캐시/GdiplusToken을 해제한다.
+		static ResourceManager Instance;
+		return Instance;
+	}
+
+	ResourceManager::~ResourceManager()
+	{
+		// Shutdown은 멱등이므로 명시적 Shutdown 호출 후에도 안전.
+		Shutdown();
 	}
 
 	void ResourceManager::Initialize()
@@ -70,5 +82,13 @@ namespace D1
 		if (It != TextureCache.end())
 			return It->second;
 		return nullptr;
+	}
+
+	std::shared_ptr<UCollisionMap> ResourceManager::LoadCollisionMap()
+	{
+		auto Map = std::make_shared<UCollisionMap>();
+		if (!Map->Load(CollisionMapPath))
+			return nullptr;
+		return Map;
 	}
 }

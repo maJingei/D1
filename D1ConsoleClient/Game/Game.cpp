@@ -2,6 +2,7 @@
 
 #include "World/UWorld.h"
 #include "World/UTileMap.h"
+#include "World/UCollisionMap.h"
 #include "Actor/APlayerActor.h"
 
 #include "../Subsystems/TimeManager.h"
@@ -88,14 +89,16 @@ namespace D1
 #endif
 	}
 
-	Game& Game::Get()
-	{
-		static Game* Instance = new Game();
-		return *Instance;
-	}
+	// 생성자/소멸자는 cpp 에 정의해야 std::unique_ptr<UWorld> 의 incomplete type 문제를 회피한다.
+	Game::Game() = default;
 
-	// UWorld의 완전한 타입이 Game.cpp에서 포함된 후 소멸자를 정의한다.
-	Game::~Game() = default;
+	// 스택 객체이므로 WinMain 종료 시 자동 호출되며,
+	// 이 시점에 정적 서브시스템(Renderer/ResourceManager 등)들은 아직 살아있어 안전.
+	// Shutdown 은 멱등이므로 WinMain 에서 명시적으로 호출한 뒤에도 무해하다.
+	Game::~Game()
+	{
+		Shutdown();
+	}
 
 	bool Game::Initialize(HINSTANCE hInstance)
 	{
@@ -104,11 +107,17 @@ namespace D1
 		{
 			return false;
 		}
-		// 서브시스템 초기화 (순서 중요: TimeManager → InputManager → Renderer → ResourceManager)
+		// 서브시스템 초기화 (순서 중요: TimeManager → InputManager → Renderer → ResourceManager).
+		// Renderer 초기화 실패 시 이미 초기화된 서브시스템과 윈도우를 역순으로 해제한다.
 		TimeManager::Get().Initialize();
 		InputManager::Get().Initialize();
 		if (!Renderer::Get().Initialize(HWnd, WindowWidth, WindowHeight))
 		{
+			InputManager::Get().Shutdown();
+			TimeManager::Get().Shutdown();
+			::DestroyWindow(HWnd);
+			HWnd = nullptr;
+			::UnregisterClass(L"D1GameWindow", HInstance);
 			return false;
 		}
 		ResourceManager::Get().Initialize();
@@ -264,6 +273,9 @@ namespace D1
 				World->AddTileLayer(std::move(TileMap));
 			}
 		}
+
+		// 충돌 맵 로드: 렌더 레이어와 분리된 단일 논리 레이어
+		World->SetCollisionMap(ResourceManager::Get().LoadCollisionMap());
 	}
 
 	void Game::OnEchoReceived(const uint8* Data, int32 NumOfBytes)

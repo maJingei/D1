@@ -4,8 +4,14 @@ namespace D1
 {
 	TimeManager& TimeManager::Get()
 	{
-		static TimeManager* Instance = new TimeManager();
-		return *Instance;
+		// Meyers singleton: 프로세스 종료 시 dtor 자동 호출.
+		static TimeManager Instance;
+		return Instance;
+	}
+
+	TimeManager::~TimeManager()
+	{
+		Shutdown();
 	}
 
 	void TimeManager::Initialize()

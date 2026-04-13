@@ -6,8 +6,14 @@ namespace D1
 {
 	InputManager& InputManager::Get()
 	{
-		static InputManager* Instance = new InputManager();
-		return *Instance;
+		// Meyers singleton: 프로세스 종료 시 dtor 자동 호출.
+		static InputManager Instance;
+		return Instance;
+	}
+
+	InputManager::~InputManager()
+	{
+		Shutdown();
 	}
 
 	void InputManager::Initialize()

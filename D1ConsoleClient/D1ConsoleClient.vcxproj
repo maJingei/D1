@@ -183,8 +183,10 @@
     <ClCompile Include="D1ConsoleClient.cpp" />
     <ClCompile Include="Game\Game.cpp" />
     <ClCompile Include="Game\Actor\APlayerActor.cpp" />
+    <ClCompile Include="Game\Sprite.cpp" />
     <ClCompile Include="Game\World\UWorld.cpp" />
     <ClCompile Include="Game\World\UTileMap.cpp" />
+    <ClCompile Include="Game\World\UCollisionMap.cpp" />
     <ClCompile Include="Subsystems\TimeManager.cpp" />
     <ClCompile Include="Subsystems\InputManager.cpp" />
     <ClCompile Include="Subsystems\Renderer.cpp" />
@@ -198,8 +200,10 @@
     <ClInclude Include="Game\Game.h" />
     <ClInclude Include="Game\Actor\AActor.h" />
     <ClInclude Include="Game\Actor\APlayerActor.h" />
+    <ClInclude Include="Game\Sprite.h" />
     <ClInclude Include="Game\World\UWorld.h" />
     <ClInclude Include="Game\World\UTileMap.h" />
+    <ClInclude Include="Game\World\UCollisionMap.h" />
     <ClInclude Include="Subsystems\TimeManager.h" />
     <ClInclude Include="Subsystems\InputManager.h" />
     <ClInclude Include="Subsystems\Renderer.h" />

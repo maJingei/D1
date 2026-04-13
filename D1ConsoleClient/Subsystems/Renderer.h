@@ -38,7 +38,7 @@ namespace D1
 
 	private:
 		Renderer() = default;
-		~Renderer() = default;
+		~Renderer();
 		Renderer(const Renderer&) = delete;
 		Renderer& operator=(const Renderer&) = delete;
 
