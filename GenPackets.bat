@@ -23,9 +23,9 @@ if %ERRORLEVEL% NEQ 0 ( echo [ERROR] Server handler failed! & popd & popd & exit
 popd
 echo [OK]
 
-echo [3/3] GenPacket: S_ -^> D1ConsoleClient\ServerPacketHandler.h
+echo [3/3] GenPacket: S_ -^> D1ConsoleClient\Network\ServerPacketHandler.h
 pushd %GEN%
-%GEN_EXE% --path %PROTO_SRC% --output %SOLUTION%\D1ConsoleClient\ServerPacketHandler --recv S_ --send C_
+%GEN_EXE% --path %PROTO_SRC% --output %SOLUTION%\D1ConsoleClient\Network\ServerPacketHandler --recv S_ --send C_
 if %ERRORLEVEL% NEQ 0 ( echo [ERROR] Client handler failed! & popd & popd & exit /b 1 )
 popd
 echo [OK]

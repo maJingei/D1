@@ -64,14 +64,29 @@ namespace D1
 		DisconnectEvent() : IocpEvent(EventType::Disconnect) {}
 	};
 
-	/** 클라이언트 연결 수용 이벤트 */
+	/**
+	 * 클라이언트 연결 수용 이벤트.
+	 *
+	 * AcceptEx 는 호출 시점에 클라이언트 소켓을 이미 쥐고 있어야 하므로, Listener 는
+	 * PostAccept 시점에 Session 을 미리 생성해두고 그 소켓을 AcceptEx 에 넘긴다.
+	 * 즉 "대기 중인 AcceptEx 1개" 와 "pre-create 된 Session 1개" 가 쌍을 이루는 것이
+	 * 자연스러우므로, SessionRef 와 주소 버퍼를 AcceptEvent 가 함께 소유한다.
+	 * 소켓의 수명은 Session 소멸자가 책임지므로 이 이벤트는 명시적 closesocket 을 하지 않는다.
+	 */
 	class AcceptEvent : public IocpEvent
 	{
 	public:
-		AcceptEvent() : IocpEvent(EventType::Accept), ClientSocket(INVALID_SOCKET) {}
+		AcceptEvent() : IocpEvent(EventType::Accept) {}
 
-		/** AcceptEx용 미리 생성된 클라이언트 소켓 */
-		SOCKET ClientSocket = INVALID_SOCKET;
+		/**
+		 * 이번 AcceptEx 완료 시 활성화될 pre-create Session.
+		 * PostAccept 에서 생성(+Service.Sessions 에 등록), ProcessAccept 성공 경로에서 소비(std::move)된다.
+		 * 셧다운/실패 시에는 Service::ReleaseSession 으로 Service 에서 제거 + reset 으로 Session 소멸자가 소켓을 닫는다.
+		 */
+		SessionRef Session;
+
+		/** AcceptEx 가 로컬/원격 주소를 기록하는 버퍼. 비동기 완료까지 유지되어야 한다. */
+		char AddrBuffer[64] = {};
 	};
 
 	/** 데이터 수신 이벤트 */

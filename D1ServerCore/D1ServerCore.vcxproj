@@ -166,6 +166,7 @@
   <ItemGroup>
     <ClInclude Include="Core\Types.h" />
     <ClInclude Include="Core\ContainerTypes.h" />
+    <ClInclude Include="Core\FVector2D.h" />
     <ClInclude Include="Iocp\IocpCore.h" />
     <ClInclude Include="Iocp\IocpEvent.h" />
     <ClInclude Include="Iocp\IocpObject.h" />
@@ -183,6 +184,10 @@
     <ClInclude Include="Memory\ObjectPool.h" />
     <ClInclude Include="Threading\ThreadManager.h" />
     <ClInclude Include="Threading\ReadWriteLock.h" />
+    <ClInclude Include="Job\Job.h" />
+    <ClInclude Include="Job\JobQueue.h" />
+    <ClInclude Include="Job\JobSerializer.h" />
+    <ClInclude Include="Job\GlobalJobQueue.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="D1ServerCore.cpp" />
@@ -201,6 +206,8 @@
     <ClCompile Include="Memory\MemoryPool.cpp" />
     <ClCompile Include="Threading\ThreadManager.cpp" />
     <ClCompile Include="Threading\ReadWriteLock.cpp" />
+    <ClCompile Include="Job\JobSerializer.cpp" />
+    <ClCompile Include="Job\GlobalJobQueue.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

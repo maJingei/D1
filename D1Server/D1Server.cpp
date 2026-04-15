@@ -10,29 +10,24 @@
 #include "Iocp/SendBuffer.h"
 #include "ServerService.h"
 #include "ClientPacketHandler.h"
+#include "MoveCounter.h"
+#include "GameServerSession.h"
+#include "GameRoom.h"
 #include "Iocp/Session.h"
 #include "Iocp/PacketSession.h"
 
+#include <atomic>
+#include <chrono>
+#include <string>
+#include <thread>
+#include <windows.h>
+
 #include "Threading/ThreadManager.h"
 #include "Memory/MemoryPool.h"
+#include "Job/GlobalJobQueue.h"
+#include "Job/JobSerializer.h"
 
 using namespace D1;
-
-namespace
-{
-	/**
-	 * 서버 측 세션: PacketSession 을 상속하여 OnRecvPacket 을 서버 핸들러 테이블로 디스패치한다.
-	 */
-	class GameServerSession : public PacketSession
-	{
-	protected:
-		void OnRecvPacket(BYTE* Buffer, int32 Len) override
-		{
-			PacketSessionRef Ref = GetPacketSessionRef();
-			ClientPacketHandler::HandlePacket(Ref, Buffer, Len);
-		}
-	};
-}
 
 int main(int argc, char* argv[])
 {
@@ -53,6 +48,19 @@ int main(int argc, char* argv[])
 	// Step 1.5: 서버 패킷 핸들러 테이블 초기화
 	ClientPacketHandler::Init();
 
+	// Step 1.6: GameRoom 초기화 — 서버 권위적 이동 검증용 Collision CSV 로드.
+	// exe 기준 상대 경로: exe 는 Binary\$(Configuration)\ 에 위치하므로 "..\..\Resource\Collision_Collision.csv" 가 SolutionDir\Resource\... 를 가리킨다.
+	{
+		char ExePath[MAX_PATH] = { 0 };
+		::GetModuleFileNameA(nullptr, ExePath, MAX_PATH);
+		std::string Path(ExePath);
+		const size_t LastSep = Path.find_last_of("\\/");
+		const std::string BaseDir = (LastSep != std::string::npos) ? Path.substr(0, LastSep + 1) : std::string();
+		const std::string CollisionCsvPath = BaseDir + "..\\..\\Resource\\Collision_Collision.csv";
+		if (GameRoom::Get()->Initialize(CollisionCsvPath) == false)
+			std::cout << "[Server] GameRoom CollisionMap load failed: " << CollisionCsvPath << std::endl;
+	}
+
 	// Step 2: ServerService 생성 및 시작
 	ServerServiceRef Server = std::make_shared<ServerService>();
 	Server->SetSessionFactory([]() -> SessionRef { return std::make_shared<GameServerSession>(); });
@@ -71,19 +79,76 @@ int main(int argc, char* argv[])
 	std::cout << "  Press Enter to shutdown..." << std::endl;
 	std::cout << "========================================" << std::endl;
 
-	// Step 3: 워커 스레드 1개 생성
+	// IOCP 워커 및 Flush Worker 개수 상수
+	static constexpr int32 IOCP_WORKER_COUNT = 5;
+	static constexpr int32 FLUSH_WORKER_COUNT = 3;
+
+	// Step 3: 워커 스레드 생성
 	ThreadManager& Manager = ThreadManager::GetInstance();
-	Manager.CreateThread([Server]()
+
+	// IOCP 워커: 패킷 수신 처리 및 PushJob 담당.
+	for (int32 i = 0; i < IOCP_WORKER_COUNT; i++)
 	{
-		while (Server->GetIocpCore()->Dispatch())
+		Manager.CreateThread([Server]()
 		{
-		}
-		std::cout << "[Worker] Dispatch loop exited" << std::endl;
-	});
+			while (Server->GetIocpCore()->Dispatch())
+			{
+			}
+			std::cout << "[Worker] Dispatch loop exited" << "\n";
+		});
+	}
+
+	// Flush Worker 종료 신호 — 종료 시 false 로 바꾸면 Pop 대기가 풀린다.
+	std::atomic<bool> bFlushWorkerRun{ true };
+
+	// Flush Worker: GlobalJobQueue 에서 JobSerializer 를 꺼내 FlushJob 을 호출한다.
+	// Push/Flush 분리 모델 — IOCP 워커는 Push 만, Flush Worker 는 Flush 만 담당.
+	for (int32 i = 0; i < FLUSH_WORKER_COUNT; i++)
+	{
+		Manager.CreateThread([&bFlushWorkerRun]()
+		{
+			while (true)
+			{
+				JobSerializerRef Serializer = GlobalJobQueue::GetInstance().Pop(bFlushWorkerRun);
+				if (Serializer == nullptr)
+					break;
+				Serializer->FlushJob();
+			}
+			std::cout << "[FlushWorker] exited" << "\n";
+		});
+	}
+
 	Manager.Launch();
+
+	// Step 3.5: TPS 로거. 1초 주기로 GMoveCounter diff 를 찍는다.
+	// std::thread 로 별도 관리(ThreadManager 는 TLS 설계상 워커 전용) — bTpsLoggerRun 으로 명시 종료.
+	std::atomic<bool> bTpsLoggerRun{ true };
+	std::thread TpsLoggerThread([&bTpsLoggerRun]()
+	{
+		uint64 Prev = GMoveCounter.load(std::memory_order_relaxed);
+		auto Last = std::chrono::steady_clock::now();
+		while (bTpsLoggerRun.load(std::memory_order_relaxed))
+		{
+			std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+			const uint64 Cur = GMoveCounter.load(std::memory_order_relaxed);
+			const uint64 Delta = Cur - Prev;
+			Prev = Cur;
+
+			const auto Now = std::chrono::steady_clock::now();
+			const double ElapsedSec = std::chrono::duration<double>(Now - Last).count();
+			Last = Now;
+
+			const double Tps = (ElapsedSec > 0.0) ? (static_cast<double>(Delta) / ElapsedSec) : 0.0;
+			std::cout << "[TPS] moves/sec=" << Tps << " (delta=" << Delta << " total=" << Cur << ")" << std::endl;
+		}
+	});
 
 	// Step 4: Enter 키로 종료 대기
 	std::cin.get();
+
+	// TPS 로거 먼저 종료 — Join 은 Manager 종료 이전에 수행한다.
+	bTpsLoggerRun.store(false, std::memory_order_relaxed);
+	if (TpsLoggerThread.joinable()) TpsLoggerThread.join();
 
 	// Step 5: 종료 시퀀스
 	// 불변식(P6): 워커 생존 구간에서만 drain 가능. Stop → PQCS → Join 순서는 역전 금지.
@@ -95,6 +160,12 @@ int main(int argc, char* argv[])
 
 	// (2) drain이 끝난 후에야 워커에 종료 신호 전송.
 	::PostQueuedCompletionStatus(Server->GetIocpCore()->GetHandle(), 0, 0, nullptr);
+
+	// Flush Worker 종료: bFlushWorkerRun 을 false 로 바꾸고 모든 대기 Worker 를 깨운다.
+	// WakeAll 이후 Pop 에서 nullptr 이 반환되어 Flush Worker 루프가 종료된다.
+	bFlushWorkerRun.store(false, std::memory_order_relaxed);
+	GlobalJobQueue::GetInstance().WakeAll();
+
 	Manager.JoinAll();
 	std::cout << "[Worker joined]" << std::endl;
 

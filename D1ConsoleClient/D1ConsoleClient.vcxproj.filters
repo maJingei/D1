@@ -13,42 +13,129 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
-    <Filter Include="Game">
-      <UniqueIdentifier>{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}</UniqueIdentifier>
+    <Filter Include="GameObject">
+      <UniqueIdentifier>{B0A1C3D4-E5F6-7801-ABCD-EF1234567801}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Subsystems">
-      <UniqueIdentifier>{B2C3D4E5-F6A7-8901-BCDE-F12345678901}</UniqueIdentifier>
+    <Filter Include="World">
+      <UniqueIdentifier>{B0A1C3D4-E5F6-7802-ABCD-EF1234567802}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Render">
+      <UniqueIdentifier>{B0A1C3D4-E5F6-7803-ABCD-EF1234567803}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Input">
+      <UniqueIdentifier>{B0A1C3D4-E5F6-7804-ABCD-EF1234567804}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Time">
+      <UniqueIdentifier>{B0A1C3D4-E5F6-7805-ABCD-EF1234567805}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Network">
+      <UniqueIdentifier>{B0A1C3D4-E5F6-7806-ABCD-EF1234567806}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="D1ConsoleClient.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Game\Game.cpp">
-      <Filter>Game</Filter>
+    <ClCompile Include="Game.cpp">
+      <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Subsystems\TimeManager.cpp">
-      <Filter>Subsystems</Filter>
+    <ClCompile Include="GameObject\AnimActor.cpp">
+      <Filter>GameObject</Filter>
     </ClCompile>
-    <ClCompile Include="Subsystems\InputManager.cpp">
-      <Filter>Subsystems</Filter>
+    <ClCompile Include="GameObject\APlayerActor.cpp">
+      <Filter>GameObject</Filter>
     </ClCompile>
-    <ClCompile Include="Subsystems\Renderer.cpp">
-      <Filter>Subsystems</Filter>
+    <ClCompile Include="GameObject\AMonsterActor.cpp">
+      <Filter>GameObject</Filter>
+    </ClCompile>
+    <ClCompile Include="World\UWorld.cpp">
+      <Filter>World</Filter>
+    </ClCompile>
+    <ClCompile Include="World\UTileMap.cpp">
+      <Filter>World</Filter>
+    </ClCompile>
+    <ClCompile Include="$(SolutionDir)Common\UCollisionMap.cpp">
+      <Filter>World</Filter>
+    </ClCompile>
+    <ClCompile Include="Render\Sprite.cpp">
+      <Filter>Render</Filter>
+    </ClCompile>
+    <ClCompile Include="Render\Renderer.cpp">
+      <Filter>Render</Filter>
+    </ClCompile>
+    <ClCompile Include="Render\Texture.cpp">
+      <Filter>Render</Filter>
+    </ClCompile>
+    <ClCompile Include="Render\ResourceManager.cpp">
+      <Filter>Render</Filter>
+    </ClCompile>
+    <ClCompile Include="Input\InputManager.cpp">
+      <Filter>Input</Filter>
+    </ClCompile>
+    <ClCompile Include="Time\TimeManager.cpp">
+      <Filter>Time</Filter>
+    </ClCompile>
+    <ClCompile Include="Network\ClientService.cpp">
+      <Filter>Network</Filter>
+    </ClCompile>
+    <ClCompile Include="Network\GameClientSession.cpp">
+      <Filter>Network</Filter>
+    </ClCompile>
+    <ClCompile Include="Network\ServerPacketHandler.cpp">
+      <Filter>Network</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Game\Game.h">
-      <Filter>Game</Filter>
+    <ClInclude Include="Game.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Subsystems\TimeManager.h">
-      <Filter>Subsystems</Filter>
+    <ClInclude Include="GameObject\AActor.h">
+      <Filter>GameObject</Filter>
     </ClInclude>
-    <ClInclude Include="Subsystems\InputManager.h">
-      <Filter>Subsystems</Filter>
+    <ClInclude Include="GameObject\AnimActor.h">
+      <Filter>GameObject</Filter>
     </ClInclude>
-    <ClInclude Include="Subsystems\Renderer.h">
-      <Filter>Subsystems</Filter>
+    <ClInclude Include="GameObject\APlayerActor.h">
+      <Filter>GameObject</Filter>
+    </ClInclude>
+    <ClInclude Include="GameObject\AMonsterActor.h">
+      <Filter>GameObject</Filter>
+    </ClInclude>
+    <ClInclude Include="World\UWorld.h">
+      <Filter>World</Filter>
+    </ClInclude>
+    <ClInclude Include="World\UTileMap.h">
+      <Filter>World</Filter>
+    </ClInclude>
+    <ClInclude Include="$(SolutionDir)Common\UCollisionMap.h">
+      <Filter>World</Filter>
+    </ClInclude>
+    <ClInclude Include="Render\Sprite.h">
+      <Filter>Render</Filter>
+    </ClInclude>
+    <ClInclude Include="Render\Renderer.h">
+      <Filter>Render</Filter>
+    </ClInclude>
+    <ClInclude Include="Render\Texture.h">
+      <Filter>Render</Filter>
+    </ClInclude>
+    <ClInclude Include="Render\ResourceManager.h">
+      <Filter>Render</Filter>
+    </ClInclude>
+    <ClInclude Include="Input\InputManager.h">
+      <Filter>Input</Filter>
+    </ClInclude>
+    <ClInclude Include="Time\TimeManager.h">
+      <Filter>Time</Filter>
+    </ClInclude>
+    <ClInclude Include="Network\ClientService.h">
+      <Filter>Network</Filter>
+    </ClInclude>
+    <ClInclude Include="Network\GameClientSession.h">
+      <Filter>Network</Filter>
+    </ClInclude>
+    <ClInclude Include="Network\ServerPacketHandler.h">
+      <Filter>Network</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

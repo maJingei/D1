@@ -82,6 +82,15 @@ namespace D1
 
 	class SendBuffer;
 	using SendBufferRef = std::shared_ptr<SendBuffer>;
+
+	class Job;
+	using JobRef = std::shared_ptr<Job>;
+
+	class JobQueue;
+	using JobQueueRef = std::shared_ptr<JobQueue>;
+
+	class JobSerializer;
+	using JobSerializerRef = std::shared_ptr<JobSerializer>;
 }
 
 // D1 네임스페이스 타입을 전역으로 노출 (UE 스타일 컨벤션)

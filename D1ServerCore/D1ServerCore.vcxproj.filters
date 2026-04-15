@@ -15,6 +15,11 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <Filter Include="Job">
+      <UniqueIdentifier>{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
     <ClCompile Include="D1ServerCore.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -26,6 +31,12 @@
     </ClCompile>
     <ClCompile Include="MemoryPool.cpp">
       <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Job\JobSerializer.cpp">
+      <Filter>Job</Filter>
+    </ClCompile>
+    <ClCompile Include="Job\GlobalJobQueue.cpp">
+      <Filter>Job</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -46,6 +57,21 @@
     </ClInclude>
     <ClInclude Include="ContainerTypes.h">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\FVector2D.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Job\Job.h">
+      <Filter>Job</Filter>
+    </ClInclude>
+    <ClInclude Include="Job\JobQueue.h">
+      <Filter>Job</Filter>
+    </ClInclude>
+    <ClInclude Include="Job\JobSerializer.h">
+      <Filter>Job</Filter>
+    </ClInclude>
+    <ClInclude Include="Job\GlobalJobQueue.h">
+      <Filter>Job</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

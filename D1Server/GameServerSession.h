@@ -1,0 +1,28 @@
+#pragma once
+
+#include "Iocp/PacketSession.h"
+#include "Core/Types.h"
+
+namespace D1
+{
+	/**
+	 * 서버 측 세션: PacketSession 을 상속하여 OnRecvPacket 을 서버 핸들러 테이블로 디스패치한다.
+	 *
+	 * - PlayerID: C_ENTER_GAME 처리 시 GameRoom 에서 발급받아 저장한다.
+	 * - OnDisconnected: GameRoom 에서 플레이어를 제거하여 맵/브로드캐스트 목록이 stale 참조를 남기지 않도록 한다.
+	 */
+	class GameServerSession : public PacketSession
+	{
+	public:
+		uint64 GetPlayerID() const { return PlayerID; }
+		void SetPlayerID(uint64 InPlayerID) { PlayerID = InPlayerID; }
+
+	protected:
+		void OnRecvPacket(BYTE* Buffer, int32 Len) override;
+		void OnDisconnected() override;
+
+	private:
+		/** C_ENTER_GAME 처리로 0 이 아닌 값이 들어간다. 0 은 '아직 입장 전' 상태. */
+		uint64 PlayerID = 0;
+	};
+}

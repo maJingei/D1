@@ -1,10 +1,12 @@
-﻿
+
 Microsoft Visual Studio Solution File, Format Version 12.00
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "D1Server", "D1Server\D1Server.vcxproj", "{4F90C190-C3E7-4C62-9DAF-87F97DF5FD19}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "D1ServerCore", "D1ServerCore\D1ServerCore.vcxproj", "{9A07D2F2-554A-47AA-876B-F12717CA42E6}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "D1ConsoleClient", "D1ConsoleClient\D1ConsoleClient.vcxproj", "{4506C2B5-76D0-4361-A3C6-BDEB92D7CAC0}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "D1LoadBot", "D1LoadBot\D1LoadBot.vcxproj", "{A8F5B7C3-4E92-4B1A-9D81-5C3F8E2A9D41}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -38,5 +40,13 @@ Global
 		{4506C2B5-76D0-4361-A3C6-BDEB92D7CAC0}.Release|Win32.Build.0 = Release|Win32
 		{4506C2B5-76D0-4361-A3C6-BDEB92D7CAC0}.Release|x64.ActiveCfg = Release|x64
 		{4506C2B5-76D0-4361-A3C6-BDEB92D7CAC0}.Release|x64.Build.0 = Release|x64
+		{A8F5B7C3-4E92-4B1A-9D81-5C3F8E2A9D41}.Debug|Win32.ActiveCfg = Debug|Win32
+		{A8F5B7C3-4E92-4B1A-9D81-5C3F8E2A9D41}.Debug|Win32.Build.0 = Debug|Win32
+		{A8F5B7C3-4E92-4B1A-9D81-5C3F8E2A9D41}.Debug|x64.ActiveCfg = Debug|x64
+		{A8F5B7C3-4E92-4B1A-9D81-5C3F8E2A9D41}.Debug|x64.Build.0 = Debug|x64
+		{A8F5B7C3-4E92-4B1A-9D81-5C3F8E2A9D41}.Release|Win32.ActiveCfg = Release|Win32
+		{A8F5B7C3-4E92-4B1A-9D81-5C3F8E2A9D41}.Release|Win32.Build.0 = Release|Win32
+		{A8F5B7C3-4E92-4B1A-9D81-5C3F8E2A9D41}.Release|x64.ActiveCfg = Release|x64
+		{A8F5B7C3-4E92-4B1A-9D81-5C3F8E2A9D41}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 EndGlobal

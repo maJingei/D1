@@ -8,9 +8,12 @@ namespace D1
 
 	void SocketUtils::Init()
 	{
-		// Step 1: WSAStartup
+		// Step 1: WSAStartup.
+		// Release 빌드에서 assert 는 통째로 제거되므로, 부수효과가 있는 호출은 반드시 변수에 담은 뒤 assert 로 검증한다.
 		WSADATA WsaData;
-		assert(::WSAStartup(MAKEWORD(2, 2), &WsaData) == 0);
+		const int WsaStartupResult = ::WSAStartup(MAKEWORD(2, 2), &WsaData);
+		assert(WsaStartupResult == 0);
+		(void)WsaStartupResult;
 
 		// Step 2: 임시 소켓으로 LPFN 바인딩
 		SOCKET DummySocket = CreateTcpSocket();
@@ -20,15 +23,21 @@ namespace D1
 
 		// AcceptEx 바인딩
 		GUID GuidAcceptEx = WSAID_ACCEPTEX;
-		assert(::WSAIoctl(DummySocket, SIO_GET_EXTENSION_FUNCTION_POINTER, &GuidAcceptEx, sizeof(GuidAcceptEx), &AcceptEx, sizeof(AcceptEx), &Bytes, nullptr, nullptr) != SOCKET_ERROR);
+		const int AcceptExResult = ::WSAIoctl(DummySocket, SIO_GET_EXTENSION_FUNCTION_POINTER, &GuidAcceptEx, sizeof(GuidAcceptEx), &AcceptEx, sizeof(AcceptEx), &Bytes, nullptr, nullptr);
+		assert(AcceptExResult != SOCKET_ERROR);
+		(void)AcceptExResult;
 
 		// ConnectEx 바인딩
 		GUID GuidConnectEx = WSAID_CONNECTEX;
-		assert(::WSAIoctl(DummySocket, SIO_GET_EXTENSION_FUNCTION_POINTER, &GuidConnectEx, sizeof(GuidConnectEx), &ConnectEx, sizeof(ConnectEx), &Bytes, nullptr, nullptr) != SOCKET_ERROR);
+		const int ConnectExResult = ::WSAIoctl(DummySocket, SIO_GET_EXTENSION_FUNCTION_POINTER, &GuidConnectEx, sizeof(GuidConnectEx), &ConnectEx, sizeof(ConnectEx), &Bytes, nullptr, nullptr);
+		assert(ConnectExResult != SOCKET_ERROR);
+		(void)ConnectExResult;
 
 		// DisconnectEx 바인딩
 		GUID GuidDisconnectEx = WSAID_DISCONNECTEX;
-		assert(::WSAIoctl(DummySocket, SIO_GET_EXTENSION_FUNCTION_POINTER, &GuidDisconnectEx, sizeof(GuidDisconnectEx), &DisconnectEx, sizeof(DisconnectEx), &Bytes, nullptr, nullptr) != SOCKET_ERROR);
+		const int DisconnectExResult = ::WSAIoctl(DummySocket, SIO_GET_EXTENSION_FUNCTION_POINTER, &GuidDisconnectEx, sizeof(GuidDisconnectEx), &DisconnectEx, sizeof(DisconnectEx), &Bytes, nullptr, nullptr);
+		assert(DisconnectExResult != SOCKET_ERROR);
+		(void)DisconnectExResult;
 
 		::closesocket(DummySocket);
 	}

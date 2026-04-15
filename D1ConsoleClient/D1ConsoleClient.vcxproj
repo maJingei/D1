@@ -115,7 +115,7 @@
       <LanguageStandard>stdcpp17</LanguageStandard>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>$(SolutionDir)D1ServerCore;$(SolutionDir)Libraries\Include;$(SolutionDir)Common;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(SolutionDir)D1ServerCore;$(SolutionDir)Libraries\Include;$(SolutionDir)Common;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -124,7 +124,7 @@
       <AdditionalDependencies>D1ServerCore.lib;libprotobufd.lib;Synchronization.lib;ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PreBuildEvent>
-      <Command>IF EXIST "$(SolutionDir)Common\protoBuf\Protocol.proto" ("$(SolutionDir)Tools\PacketGenerator\GenPacket.exe" --path "$(SolutionDir)Common\protoBuf\Protocol.proto" --output "$(ProjectDir)ServerPacketHandler" --recv S_ --send C_)</Command>
+      <Command>IF EXIST "$(SolutionDir)Common\protoBuf\Protocol.proto" ("$(SolutionDir)Tools\PacketGenerator\GenPacket.exe" --path "$(SolutionDir)Common\protoBuf\Protocol.proto" --output "$(ProjectDir)Network\ServerPacketHandler" --recv S_ --send C_)</Command>
     </PreBuildEvent>
     <PostBuildEvent>
       <Command>xcopy /y "$(SolutionDir)Libraries\Libs\ProtoBuf\Debug\libprotobufd.dll" "$(OutDir)"</Command>
@@ -162,7 +162,7 @@
       <LanguageStandard>stdcpp17</LanguageStandard>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>$(SolutionDir)D1ServerCore;$(SolutionDir)Libraries\Include;$(SolutionDir)Common;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(SolutionDir)D1ServerCore;$(SolutionDir)Libraries\Include;$(SolutionDir)Common;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -173,7 +173,7 @@
       <AdditionalDependencies>D1ServerCore.lib;libprotobuf.lib;Synchronization.lib;ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PreBuildEvent>
-      <Command>IF EXIST "$(SolutionDir)Common\protoBuf\Protocol.proto" ("$(SolutionDir)Tools\PacketGenerator\GenPacket.exe" --path "$(SolutionDir)Common\protoBuf\Protocol.proto" --output "$(ProjectDir)ServerPacketHandler" --recv S_ --send C_)</Command>
+      <Command>IF EXIST "$(SolutionDir)Common\protoBuf\Protocol.proto" ("$(SolutionDir)Tools\PacketGenerator\GenPacket.exe" --path "$(SolutionDir)Common\protoBuf\Protocol.proto" --output "$(ProjectDir)Network\ServerPacketHandler" --recv S_ --send C_)</Command>
     </PreBuildEvent>
     <PostBuildEvent>
       <Command>xcopy /y "$(SolutionDir)Libraries\Libs\ProtoBuf\Release\libprotobuf.dll" "$(OutDir)"</Command>
@@ -181,36 +181,41 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="D1ConsoleClient.cpp" />
-    <ClCompile Include="Game\Game.cpp" />
-    <ClCompile Include="Game\Actor\APlayerActor.cpp" />
-    <ClCompile Include="Game\Sprite.cpp" />
-    <ClCompile Include="Game\World\UWorld.cpp" />
-    <ClCompile Include="Game\World\UTileMap.cpp" />
-    <ClCompile Include="Game\World\UCollisionMap.cpp" />
-    <ClCompile Include="Subsystems\TimeManager.cpp" />
-    <ClCompile Include="Subsystems\InputManager.cpp" />
-    <ClCompile Include="Subsystems\Renderer.cpp" />
-    <ClCompile Include="Subsystems\Texture.cpp" />
-    <ClCompile Include="Subsystems\ResourceManager.cpp" />
-    <ClCompile Include="ClientService.cpp" />
-    <ClCompile Include="ServerPacketHandler.cpp" />
+    <ClCompile Include="Game.cpp" />
+    <ClCompile Include="GameObject\AnimActor.cpp" />
+    <ClCompile Include="GameObject\APlayerActor.cpp" />
+    <ClCompile Include="GameObject\AMonsterActor.cpp" />
+    <ClCompile Include="Render\Sprite.cpp" />
+    <ClCompile Include="Render\Renderer.cpp" />
+    <ClCompile Include="Render\Texture.cpp" />
+    <ClCompile Include="Render\ResourceManager.cpp" />
+    <ClCompile Include="World\UWorld.cpp" />
+    <ClCompile Include="World\UTileMap.cpp" />
+    <ClCompile Include="$(SolutionDir)Common\UCollisionMap.cpp" />
+    <ClCompile Include="Time\TimeManager.cpp" />
+    <ClCompile Include="Input\InputManager.cpp" />
+    <ClCompile Include="Network\ClientService.cpp" />
+    <ClCompile Include="Network\GameClientSession.cpp" />
+    <ClCompile Include="Network\ServerPacketHandler.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Game\FVector2D.h" />
-    <ClInclude Include="Game\Game.h" />
-    <ClInclude Include="Game\Actor\AActor.h" />
-    <ClInclude Include="Game\Actor\APlayerActor.h" />
-    <ClInclude Include="Game\Sprite.h" />
-    <ClInclude Include="Game\World\UWorld.h" />
-    <ClInclude Include="Game\World\UTileMap.h" />
-    <ClInclude Include="Game\World\UCollisionMap.h" />
-    <ClInclude Include="Subsystems\TimeManager.h" />
-    <ClInclude Include="Subsystems\InputManager.h" />
-    <ClInclude Include="Subsystems\Renderer.h" />
-    <ClInclude Include="Subsystems\Texture.h" />
-    <ClInclude Include="Subsystems\ResourceManager.h" />
-    <ClInclude Include="ClientService.h" />
-    <ClInclude Include="ServerPacketHandler.h" />
+    <ClInclude Include="Game.h" />
+    <ClInclude Include="GameObject\AActor.h" />
+    <ClInclude Include="GameObject\AnimActor.h" />
+    <ClInclude Include="GameObject\APlayerActor.h" />
+    <ClInclude Include="GameObject\AMonsterActor.h" />
+    <ClInclude Include="Render\Sprite.h" />
+    <ClInclude Include="Render\Renderer.h" />
+    <ClInclude Include="Render\Texture.h" />
+    <ClInclude Include="Render\ResourceManager.h" />
+    <ClInclude Include="World\UWorld.h" />
+    <ClInclude Include="World\UTileMap.h" />
+    <ClInclude Include="$(SolutionDir)Common\UCollisionMap.h" />
+    <ClInclude Include="Time\TimeManager.h" />
+    <ClInclude Include="Input\InputManager.h" />
+    <ClInclude Include="Network\ClientService.h" />
+    <ClInclude Include="Network\GameClientSession.h" />
+    <ClInclude Include="Network\ServerPacketHandler.h" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\D1ServerCore\D1ServerCore.vcxproj">

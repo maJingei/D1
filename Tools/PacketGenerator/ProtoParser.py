@@ -27,7 +27,7 @@ class ProtoParser():
 
             # Handler에서 Enum 값을 한 번에 참조하기 위해 total에도 추가
             self.total_pkt.append(Packet(pkt_name, self.id))
-            self.id += 11
+            self.id += 1
 
         f.close()
 

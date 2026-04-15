@@ -8,7 +8,7 @@
 #include <crtdbg.h>
 #endif
 
-#include "Game/Game.h"
+#include "Game.h"
 
 #include "Threading/ThreadManager.h"
 #include "Memory/MemoryPool.h"

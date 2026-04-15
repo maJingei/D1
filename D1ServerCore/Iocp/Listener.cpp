@@ -21,13 +21,7 @@ namespace D1
 	{
 		return reinterpret_cast<HANDLE>(ListenSocket);
 	}
-
-	void Listener::Dispatch(IocpEvent* Event, int32 NumOfBytes)
-	{
-		assert(Event->Type == EventType::Accept);
-		ProcessAccept();
-	}
-
+	
 	bool Listener::Start(const NetAddress& Address, std::weak_ptr<Service> InService)
 	{
 		OwnerService = InService;
@@ -51,14 +45,16 @@ namespace D1
 		if (SocketUtils::Listen(ListenSocket) == false)
 			return false;
 
-		// IOCP에 Listener 등록
+		// IOCP 에 Listener 등록
 		if (LockedService->GetIocpCore()->Register(this) == false)
 			return false;
 
-		// 첫 번째 AcceptEx 게시
-		PostAccept();
+		// AcceptEx 풀 전체를 미리 게시해 동시 수용 용량을 확보한다.
+		for (AcceptEvent& Slot : AcceptEvents)
+			PostAccept(Slot);
 
-		std::cout << "[Listener] Started on " << Address.GetIp() << ":" << Address.GetPort() << std::endl;
+		std::cout << "[Listener] Started on " << Address.GetIp() << ":" << Address.GetPort()
+			<< " (AcceptEx pool=" << kAcceptPoolSize << ")" << "\n";
 		return true;
 	}
 
@@ -66,80 +62,122 @@ namespace D1
 	{
 		if (ListenSocket == INVALID_SOCKET)
 			return;
-		// closesocket은 pending AcceptEx를 WSA_OPERATION_ABORTED로 완료시킨다.
-		// ListenSocket을 즉시 INVALID_SOCKET으로 돌려 ProcessAccept가 abort임을 감지하도록 한다.
+		// closesocket 은 pending AcceptEx 들을 WSA_OPERATION_ABORTED 로 완료시킨다.
+		// ListenSocket 을 즉시 INVALID_SOCKET 으로 돌려 ProcessAccept 가 abort 임을 감지하도록 한다.
 		::closesocket(ListenSocket);
 		ListenSocket = INVALID_SOCKET;
 	}
 
-	void Listener::ProcessAccept()
+	void Listener::Dispatch(IocpEvent* Event, int32 NumOfBytes)
 	{
-		// 셧다운 중이면 abort된 AcceptEx 완료이므로 세션 생성/재게시를 건너뛴다.
-		// 미리 할당한 클라이언트 소켓만 안전하게 해제한다.
+		// Accept 타입이 아닐 가능성은 설계상 없지만, Release 에서 assert 가 사라지므로 런타임 가드로 처리한다.
+		if (Event == nullptr || Event->Type != EventType::Accept)
+			return;
+
+		// 완료된 AcceptEx 가 풀 내 어느 슬롯에 속하는지 포인터 비교로 찾는다.
+		// (16개 선형 스캔 — 슬롯마다 인덱스를 Event 에 심어두는 것보다 간단하고 비용 무시 가능)
+		AcceptEvent* CompletedEvent = static_cast<AcceptEvent*>(Event);
+		for (AcceptEvent& Slot : AcceptEvents)
+		{
+			if (&Slot == CompletedEvent)
+			{
+				ProcessAccept(Slot);
+				return;
+			}
+		}
+	}	
+
+	void Listener::ProcessAccept(AcceptEvent& Event)
+	{
+		// 셧다운 중이면 abort 된 AcceptEx 완료이므로 pre-Session 을 정리하고 재게시를 생략한다.
 		if (ListenSocket == INVALID_SOCKET)
 		{
-			if (AcceptIocpEvent.ClientSocket != INVALID_SOCKET)
-			{
-				::closesocket(AcceptIocpEvent.ClientSocket);
-				AcceptIocpEvent.ClientSocket = INVALID_SOCKET;
-			}
+			DropPendingSession(Event);
 			return;
 		}
 
 		ServiceRef LockedService = OwnerService.lock();
 		if (LockedService == nullptr)
 		{
-			::closesocket(AcceptIocpEvent.ClientSocket);
-			AcceptIocpEvent.ClientSocket = INVALID_SOCKET;
+			DropPendingSession(Event);
 			return;
 		}
 
-		// Step 1: Service의 Factory로 Session 생성
-		SessionRef NewSession = LockedService->CreateSession();
-		if (NewSession == nullptr)
+		// pre-Session 을 슬롯에서 꺼낸다. 이 시점부터 Session 수명은 아래 finalize 경로가 책임진다.
+		SessionRef AcceptedSession = std::move(Event.Session);
+		if (AcceptedSession == nullptr)
 		{
-			::closesocket(AcceptIocpEvent.ClientSocket);
-			PostAccept();
+			// 비정상 — PostAccept 를 거치지 않은 Event 가 완료됐다. 슬롯만 재무장.
+			PostAccept(Event);
 			return;
 		}
 
-		// Step 2: 소켓 설정
-		NewSession->SetSocket(AcceptIocpEvent.ClientSocket);
+		// Step 1: 클라이언트 소켓 컨텍스트 동기화 (getpeername 등이 정상 동작하도록)
+		SocketUtils::SetUpdateAcceptSocket(AcceptedSession->GetSocket(), ListenSocket);
 
-		// Step 3: 클라이언트 소켓 컨텍스트 동기화
-		SocketUtils::SetUpdateAcceptSocket(AcceptIocpEvent.ClientSocket, ListenSocket);
+		// Step 2: Session 을 IOCP 에 등록
+		LockedService->GetIocpCore()->Register(AcceptedSession.get());
 
-		// Step 4: Session을 IOCP에 등록
-		LockedService->GetIocpCore()->Register(NewSession.get());
+		// Step 3: 수신 대기 시작
+		AcceptedSession->RegisterRecv();
 
-		// Step 5: 수신 대기 시작
-		NewSession->RegisterRecv();
+		std::cout << "[Listener] New client accepted (sessions: " << LockedService->GetSessionCount() << ")" << "\n";
 
-		std::cout << "[Listener] New client accepted (sessions: " << LockedService->GetSessionCount() << ")" << std::endl;
-
-		// Step 6: 다음 AcceptEx 게시
-		PostAccept();
+		// Step 4: 같은 슬롯을 새로운 pre-Session 으로 재무장하여 풀 깊이 유지
+		PostAccept(Event);
 	}
 
-	void Listener::PostAccept()
+	void Listener::PostAccept(AcceptEvent& Event, int32 RetryBudget)
 	{
-		// TODO : 여러개의 AcceptEvent를 통해 여러 세션을 받을 수 있도록 수정
+		// 셧다운 중이면 재게시하지 않는다. 슬롯은 그대로 비워둔다.
+		if (ListenSocket == INVALID_SOCKET)
+			return;
 
-		// HoldForIo가 Owner 세팅과 Event.Init()을 함께 수행한다.
-		HoldForIo(AcceptIocpEvent);
+		ServiceRef LockedService = OwnerService.lock();
+		if (LockedService == nullptr)
+			return;
 
-		// 클라이언트 소켓 미리 생성
-		AcceptIocpEvent.ClientSocket = SocketUtils::CreateTcpSocket();
+		// 이전 post 의 잔존 Session 이 있으면 정리. (정상 경로에서는 ProcessAccept 가 move 로 이미 비워뒀어야 함)
+		if (Event.Session)
+			DropPendingSession(Event);
+
+		// pre-Session 생성 — Service.Sessions 에 등록된다. AcceptEx 실패 시 DropPendingSession 으로 되돌린다.
+		SessionRef NewSession = LockedService->CreateSession();
+		if (NewSession == nullptr)
+			return;
+
+		NewSession->SetSocket(SocketUtils::CreateTcpSocket());
+		if (NewSession->GetSocket() == INVALID_SOCKET)
+		{
+			LockedService->ReleaseSession(NewSession);
+			return;
+		}
+
+		Event.Session = NewSession;
+
+		// HoldForIo 가 Owner 세팅과 Event.Init() 을 함께 수행한다.
+		HoldForIo(Event);
 
 		DWORD BytesReceived = 0;
-		BOOL Result = SocketUtils::AcceptEx(ListenSocket, AcceptIocpEvent.ClientSocket, AcceptBuffer, 0, sizeof(SOCKADDR_IN) + 16, sizeof(SOCKADDR_IN) + 16, &BytesReceived, &AcceptIocpEvent);
+		BOOL Result = SocketUtils::AcceptEx(ListenSocket, NewSession->GetSocket(), Event.AddrBuffer, 0, sizeof(SOCKADDR_IN) + 16, sizeof(SOCKADDR_IN) + 16, &BytesReceived, &Event);
 		if (Result == FALSE && ::WSAGetLastError() != WSA_IO_PENDING)
 		{
-			std::cout << "[Listener] AcceptEx failed: " << ::WSAGetLastError() << std::endl;
-			// 게시 실패: HoldForIo가 잡아둔 self-ref + 미사용 수용 소켓을 즉시 해제한다.
-			AcceptIocpEvent.Owner.reset();
-			::closesocket(AcceptIocpEvent.ClientSocket);
-			AcceptIocpEvent.ClientSocket = INVALID_SOCKET;
+			std::cout << "[Listener] AcceptEx failed: " << ::WSAGetLastError() << "\n";
+			// 실패한 post 의 self-ref 와 pre-Session 을 정리하고, 슬롯을 살리기 위해 한 번만 재시도한다.
+			Event.Owner.reset();
+			DropPendingSession(Event);
+			if (RetryBudget > 0)
+				PostAccept(Event, RetryBudget - 1);
 		}
+	}
+
+	void Listener::DropPendingSession(AcceptEvent& Event)
+	{
+		if (Event.Session == nullptr)
+			return;
+		ServiceRef LockedService = OwnerService.lock();
+		if (LockedService)
+			LockedService->ReleaseSession(Event.Session);
+		Event.Session.reset();
 	}
 }

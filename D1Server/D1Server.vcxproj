@@ -182,11 +182,17 @@
   <ItemGroup>
     <ClInclude Include="ServerService.h" />
     <ClInclude Include="ClientPacketHandler.h" />
+    <ClInclude Include="GameServerSession.h" />
+    <ClInclude Include="GameRoom.h" />
+    <ClInclude Include="$(SolutionDir)Common\UCollisionMap.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="D1Server.cpp" />
     <ClCompile Include="ServerService.cpp" />
     <ClCompile Include="ClientPacketHandler.cpp" />
+    <ClCompile Include="GameServerSession.cpp" />
+    <ClCompile Include="GameRoom.cpp" />
+    <ClCompile Include="$(SolutionDir)Common\UCollisionMap.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\D1ServerCore\D1ServerCore.vcxproj">
