@@ -18,6 +18,10 @@ namespace D1LoadBot
 		 *
 		 * D1ConsoleClient/Network/ServerPacketHandler 의 템플릿 헬퍼와 동일한 와이어 포맷을 직접 구현한다.
 		 * (Console 클라 헤더는 렌더/게임 상태에 강결합되어 있어 링크 제외한다.)
+		 *
+		 * @param Packet    직렬화할 Protobuf 메시지
+		 * @param PacketId  와이어 헤더에 기록할 패킷 ID
+		 * @return          전송 준비가 완료된 SendBuffer
 		 */
 		template<typename T>
 		D1::SendBufferRef MakeBotSendBuffer(T& Packet, uint16 PacketId)
@@ -35,7 +39,14 @@ namespace D1LoadBot
 			return Buffer;
 		}
 
-		/** 스레드·봇별로 충분히 구별되는 시드 값을 만든다. */
+		/**
+		 * 스레드·봇별로 충분히 구별되는 난수 시드를 생성한다.
+		 *
+		 * steady_clock 나노초 값과 객체 포인터 주소를 XOR 해 봇마다 다른 시드를 보장한다.
+		 *
+		 * @param Salt  봇 인스턴스 포인터 (주소가 시드 엔트로피에 기여한다)
+		 * @return      mt19937 초기화용 64비트 시드
+		 */
 		uint64 MakeSeed(void* Salt)
 		{
 			const auto TimePart = std::chrono::steady_clock::now().time_since_epoch().count();
@@ -89,12 +100,34 @@ namespace D1LoadBot
 		return Out;
 	}
 
+	void BotSession::SweepTimeoutPendingMoves(std::chrono::steady_clock::time_point Now)
+	{
+		// kPendingTimeoutMs 를 넘긴 in-flight C_MOVE 항목을 제거하고 TimeoutCount 를 누적한다.
+		std::lock_guard<std::mutex> Lock(PendingMutex);
+		for (auto It = PendingMoves.begin(); It != PendingMoves.end(); )
+		{
+			const uint64 ElapsedMs = static_cast<uint64>(std::chrono::duration_cast<std::chrono::milliseconds>(Now - It->second).count());
+			if (ElapsedMs >= kPendingTimeoutMs)
+			{
+				It = PendingMoves.erase(It);
+				TimeoutCount.fetch_add(1, std::memory_order_relaxed);
+			}
+			else
+			{
+				++It;
+			}
+		}
+	}
+
 	void BotSession::PumpMove()
 	{
 		if (State.load(std::memory_order_relaxed) != EBotState::InGame)
 			return;
 
-		const auto Now = std::chrono::steady_clock::now();
+		const std::chrono::steady_clock::time_point Now = std::chrono::steady_clock::now();
+
+		// timeout 스윕 — kPendingTimeoutMs 를 넘긴 in-flight 항목을 제거한다.
+		SweepTimeoutPendingMoves(Now);
 
 		// 첫 진입 직후에는 LastMoveSentAt 이 epoch 이므로 즉시 발사된다.
 		const auto Elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(Now - LastMoveSentAt).count();
@@ -125,13 +158,17 @@ namespace D1LoadBot
 		std::uniform_int_distribution<int32> DirDist(0, 3);
 		const int32 Dir = DirDist(RandomEngine);
 
+		const uint64 Seq = NextMoveSeq++;
+		const std::chrono::steady_clock::time_point SentAt = std::chrono::steady_clock::now();
+
 		Protocol::C_MOVE Move;
 		Move.set_dir(static_cast<Protocol::Direction>(Dir));
+		Move.set_client_seq(Seq);
 
-		const uint64 Seq = NextMoveSeq++;
 		{
 			std::lock_guard<std::mutex> Lock(PendingMutex);
-			PendingMoves[Seq] = FPendingMove{ Seq, std::chrono::steady_clock::now() };
+			// 현재 송신 시간과 seq를 쌍으로 맵에 저장
+			PendingMoves.emplace(Seq, SentAt);
 		}
 
 		Send(MakeBotSendBuffer(Move, PKT_C_MOVE));
@@ -144,7 +181,7 @@ namespace D1LoadBot
 
 		const D1::PacketHeader* Header = reinterpret_cast<const D1::PacketHeader*>(Buffer);
 		const BYTE* Payload = Buffer + sizeof(D1::PacketHeader);
-		const int32 PayloadSize = Len - sizeof(D1::PacketHeader);
+		const int32 PayloadSize = Len - static_cast<int32>(sizeof(D1::PacketHeader));
 
 		switch (Header->Id)
 		{
@@ -154,6 +191,7 @@ namespace D1LoadBot
 			if (Packet.ParseFromArray(Payload, PayloadSize) == false)
 				return;
 
+			// 로그인 성공 — 게임 방 입장 요청으로 전이한다.
 			State.store(EBotState::Entering, std::memory_order_relaxed);
 			SendEnterGame();
 			break;
@@ -164,6 +202,7 @@ namespace D1LoadBot
 			if (Packet.ParseFromArray(Payload, PayloadSize) == false)
 				return;
 
+			// PlayerID 확정 후 InGame 전이 — 이후 PumpMove 에서 C_MOVE 가 발사된다.
 			MyPlayerID = Packet.player_id();
 			State.store(EBotState::InGame, std::memory_order_relaxed);
 			// 첫 PumpMove 에서 바로 쏘도록 LastMoveSentAt 은 기본값(epoch) 유지.
@@ -179,31 +218,27 @@ namespace D1LoadBot
 			if (Packet.player_id() != MyPlayerID || MyPlayerID == 0)
 				return;
 
-			// FIFO 대응: 가장 오래된 pending 을 소비한다. (서버 응답이 요청 순서대로 온다는 가정)
-			std::chrono::steady_clock::time_point SentAt;
-			bool bFound = false;
-			{
-				std::lock_guard<std::mutex> Lock(PendingMutex);
-				if (PendingMoves.empty() == false)
-				{
-					uint64 OldestSeq = UINT64_MAX;
-					for (const auto& Pair : PendingMoves)
-					{
-						if (Pair.first < OldestSeq)
-							OldestSeq = Pair.first;
-					}
-					SentAt = PendingMoves[OldestSeq].SentAt;
-					PendingMoves.erase(OldestSeq);
-					bFound = true;
-				}
-			}
-
-			if (bFound == false)
+			// seq echo-back 매칭 — 레거시(client_seq=0) 패킷은 무시한다.
+			const uint64 Seq = Packet.client_seq();
+			if (Seq == 0)
 				return;
 
-			const auto Now = std::chrono::steady_clock::now();
+			std::chrono::steady_clock::time_point SentAt;
+			{
+				std::lock_guard<std::mutex> Lock(PendingMutex);
+				// seq로 송신 시간을 꺼냅니다.
+				auto It = PendingMoves.find(Seq);
+				if (It == PendingMoves.end())
+					return; 
+				SentAt = It->second;
+				PendingMoves.erase(It);
+			}
+				
+				// 현재 시간과 송신 시간의 차이로 RTT를 구합니다. 
+			const std::chrono::steady_clock::time_point Now = std::chrono::steady_clock::now();
 			const double RttMs = std::chrono::duration<double, std::milli>(Now - SentAt).count();
 
+				// 구한 RTT는 샘플 배열에 집어넣습니다.
 			{
 				std::lock_guard<std::mutex> Lock(SampleMutex);
 				Samples.push_back(FLatencySample{ Now, RttMs });
@@ -211,8 +246,35 @@ namespace D1LoadBot
 			ReceivedMoveCount.fetch_add(1, std::memory_order_relaxed);
 			break;
 		}
-		case PKT_S_SPAWN:
 		case PKT_S_MOVE_REJECT:
+		{
+			// 서버가 이동을 거절한 경우 — 타일 차단 / 다른 플레이어 점유 / 제자리 이동 중 하나.
+			// latency/TPS 샘플에는 포함하지 않고 DropCount 만 누적해 성공률을 정직하게 측정한다.
+			Protocol::S_MOVE_REJECT Packet;
+			if (Packet.ParseFromArray(Payload, PayloadSize) == false)
+				return;
+
+			// 자기 거절만 카운트한다.
+			if (Packet.player_id() != MyPlayerID || MyPlayerID == 0)
+				return;
+
+			// seq echo-back 매칭 — PendingMoves 에서 제거해 Timeout 스윕과의 이중 계산을 막는다.
+			const uint64 Seq = Packet.client_seq();
+			if (Seq == 0)
+				return;
+
+			{
+				std::lock_guard<std::mutex> Lock(PendingMutex);
+				auto It = PendingMoves.find(Seq);
+				if (It == PendingMoves.end())
+					return; // 이미 timeout 스윕으로 제거되었거나 모르는 seq
+				PendingMoves.erase(It);
+			}
+
+			DropCount.fetch_add(1, std::memory_order_relaxed);
+			break;
+		}
+		case PKT_S_SPAWN:
 		default:
 			// 다른 패킷들은 봇 입장에서 무시해도 되는 브로드캐스트/예외 회신.
 			break;

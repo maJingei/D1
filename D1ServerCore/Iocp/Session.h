@@ -8,21 +8,48 @@
 #include "NetAddress.h"
 #include "RecvBuffer.h"
 #include "SendBuffer.h"
-#include "../Threading/ReadWriteLock.h"
+#include "../Job/JobSerializer.h"
 
 namespace D1
 {
 	class Service;
+	class Session;
+
+	/**
+	 * Session 전용 Job 직렬화기.
+	 * Session 이 멤버로 보유하며, Session::Send / ProcessSend 를
+	 * FlushWorker 에서 순차 실행하도록 직렬화한다.
+	 *
+	 * enable_shared_from_this<FSessionSerializer> 단일 계보 — 충돌 없음.
+	 * GetSerializerRef() 는 자기 자신(this shared_ptr) 을 반환하므로
+	 * GlobalJobQueue 등록에 필요한 shared_ptr<JobSerializer> 를 올바르게 공급한다.
+	 */
+	class FSessionSerializer : public JobSerializer, public std::enable_shared_from_this<FSessionSerializer>
+	{
+	public:
+		explicit FSessionSerializer(std::weak_ptr<Session> InSession) : Owner(InSession) {}
+
+		std::weak_ptr<Session> Owner;
+
+	protected:
+		JobSerializerRef GetSerializerRef() override
+		{
+			return std::static_pointer_cast<JobSerializer>(shared_from_this());
+		}
+	};
 
 	/**
 	 * 개별 클라이언트 연결을 대표하는 세션.
-	 * IocpObject를 상속하여 Connect/Disconnect/Recv/Send 이벤트를 처리한다.
-	 * 파생 클래스는 OnConnected/OnRecv/OnSend/OnDisconnected를 오버라이드하여
-	 * 커스텀 동작을 구현한다. 기본 동작은 Echo.
+	 * IocpObject 를 상속하여 Connect/Disconnect/Recv/Send 이벤트를 처리한다.
 	 *
-	 * 반드시 std::make_shared로 생성해야 한다. 베이스 IocpObject가
-	 * enable_shared_from_this를 이미 제공하므로 이중 상속은 하지 않는다
-	 * (이중 상속 시 shared_from_this() ambiguous call 발생).
+	 * Send 경로 직렬화 모델:
+	 *   - Send()        : Job 을 Serializer(FSessionSerializer) 에 Push (즉시 반환).
+	 *   - DoSend()      : 실제 SendQueue push + bSendRegistered 분기 + RegisterSend 호출.
+	 *                     항상 FlushJob 컨텍스트에서 실행 — 별도 락 불필요.
+	 *   - ProcessSend() : IOCP 완료 콜백 — DoProcessSend 를 Job 으로 래핑해 직렬화 유지.
+	 *   - DoProcessSend(): bSendRegistered 해제 및 잔여 큐 존재 시 RegisterSend 연쇄 호출.
+	 *
+	 * 반드시 std::make_shared 로 생성해야 한다.
 	 */
 	class Session : public IocpObject
 	{
@@ -42,9 +69,8 @@ namespace D1
 		void RegisterRecv();
 
 		/**
-		 * SendBuffer를 송신 큐에 넣는다. 이미 전송 중이면 큐에 쌓이고,
-		 * 그렇지 않으면 즉시 RegisterSend를 트리거한다.
-		 * 여러 호출이 누적되면 하나의 WSASend가 Scatter-Gather로 한 번에 전송한다.
+		 * SendBuffer 를 Serializer Job 으로 래핑하여 Push 한다.
+		 * 실제 송신 처리는 DoSend 에서 수행되며, 같은 세션에 대한 Send 순서가 보장된다.
 		 */
 		void Send(SendBufferRef InSendBuffer);
 
@@ -90,7 +116,7 @@ namespace D1
 		 */
 		virtual int32 OnRecv(uint8* Data, int32 NumOfBytes);
 
-		/** 데이터 송신 완료 시 호출된다. 기본 동작: RegisterRecv() */
+		/** 데이터 송신 완료 시 호출된다. 기본 동작: 없음 */
 		virtual void OnSend(int32 NumOfBytes);
 
 		/** 연결 해제 시 호출된다. 기본 동작: 없음 */
@@ -103,32 +129,57 @@ namespace D1
 		void ProcessConnect();
 		void ProcessDisconnect();
 		void ProcessRecv(int32 NumOfBytes);
+
+		/**
+		 * IOCP Send 완료 콜백. DoProcessSend 를 Job 으로 래핑하여
+		 * Serializer 직렬화 파이프라인 안에서 처리한다.
+		 */
 		void ProcessSend(int32 NumOfBytes);
 
 		/** 송신 큐에서 모아둔 SendBuffer 전체를 WSABUF 배열로 묶어 한 번에 전송한다. */
 		void RegisterSend();
+
+		/**
+		 * Send 실제 처리 — FlushJob 컨텍스트에서만 호출된다.
+		 * SendQueue push + bSendRegistered 분기 + RegisterSend 호출. 락 없음.
+		 */
+		void DoSend(SendBufferRef InSendBuffer);
+
+		/**
+		 * ProcessSend 실제 처리 — FlushJob 컨텍스트에서만 호출된다.
+		 * bSendRegistered 해제 및 잔여 큐 존재 시 RegisterSend 연쇄 호출. 락 없음.
+		 */
+		void DoProcessSend(int32 NumOfBytes);
 
 		SOCKET Socket = INVALID_SOCKET;
 		bool bDisconnected = false;
 		std::weak_ptr<Service> OwnerService;
 
 		/*-----------------------------------------------------------------*/
+		/*  Send 경로 직렬화기                                              */
+		/*-----------------------------------------------------------------*/
+
+		/**
+		 * Session 전용 JobSerializer 인스턴스.
+		 * Session 생성 시 make_shared 로 함께 생성되며, Send/ProcessSend 경로를
+		 * FlushWorker 에서 순차 실행되도록 직렬화한다.
+		 */
+		std::shared_ptr<FSessionSerializer> Serializer;
+
+		/*-----------------------------------------------------------------*/
 		/*  Send 경로 상태 (Scatter-Gather 모델)                            */
 		/*-----------------------------------------------------------------*/
 
-		/** 송신 대기 중인 SendBuffer 큐. */
+		/** 송신 대기 중인 SendBuffer 큐. Serializer 직렬화로 보호 — 별도 락 없음. */
 		std::queue<SendBufferRef> SendQueue;
-
-		/** 큐/플래그 보호용. WSASend 직전까지만 잡는다. */
-		ReadWriteLock SendLock;
 
 		/**
 		 * 이미 RegisterSend가 진행 중인지 표시하는 플래그.
-		 * true인 동안 Send()는 큐에 적재만 하고 WSASend를 재트리거하지 않는다.
-		 * ProcessSend 완료 시 큐 상태를 보고 false로 내리거나 연쇄 RegisterSend.
+		 * true인 동안 DoSend()는 큐에 적재만 하고 WSASend를 재트리거하지 않는다.
+		 * DoProcessSend 완료 시 큐 상태를 보고 false로 내리거나 연쇄 RegisterSend.
+		 * Serializer 직렬화로 보호 — 별도 락 없음.
 		 */
 		bool bSendRegistered = false;
-		// TODO: 락프리 큐로 전환하여 Send 경로 병목 제거. 현재는 구현 난이도 때문에 WriteLock 사용.
 
 		// 4개 IocpEvent 멤버 (각 타입별 1개)
 		RecvEvent RecvIocpEvent;

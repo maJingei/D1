@@ -20,6 +20,9 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Core\DiagCounters.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="D1ServerCore.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -40,6 +43,9 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Core\DiagCounters.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="Types.h">
       <Filter>Header Files</Filter>
     </ClInclude>

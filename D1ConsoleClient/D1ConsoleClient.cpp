@@ -14,6 +14,12 @@
 #include "Memory/MemoryPool.h"
 #include "Iocp/SocketUtils.h"
 #include "Iocp/SendBuffer.h"
+#include "Core/DiagCounters.h"
+#include "Job/GlobalJobQueue.h"
+#include "Job/JobSerializer.h"
+
+#include <atomic>
+#include <thread>
 
 using namespace D1;
 
@@ -27,6 +33,24 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	ThreadManager::InitTLS();
 	PoolManager::GetInstance().Initialize(64);
 	SocketUtils::Init();
+
+	// Flush Worker — Session::Send 가 Serializer Job 으로 Push 되므로 소비 주체 필수.
+	// 클라이언트는 싱글 세션이라 1개면 충분 (경합 거의 없음). 없으면 WSASend 가
+	// 영원히 발사되지 않아 서버에 어떤 패킷도 도달하지 않는다.
+	std::atomic<bool> bFlushWorkerRun{ true };
+	std::thread FlushWorkerThread([&bFlushWorkerRun]()
+	{
+		ThreadManager::InitTLS();
+		while (true)
+		{
+			JobSerializerRef Serializer = GlobalJobQueue::GetInstance().Pop(bFlushWorkerRun);
+			if (Serializer == nullptr)
+				break;
+			Serializer->FlushJob();
+		}
+		// Flush Worker 도 자체 TLS SendBufferChunk 를 보유할 수 있으므로 명시적으로 반환한다.
+		SendBufferManager::ShutdownThread();
+	});
 
 	// Game 은 스택 객체로 둔다. 정적 싱글톤으로 만들면 정적 dtor 호출 순서가
 	// 서브시스템(Renderer/ResourceManager 등)보다 늦어 ~Game()→Shutdown() 시점에
@@ -42,6 +66,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		// Initialize 실패 시에는 Game::Initialize 내부에서 부분 초기화 롤백 완료.
 		// 정상/실패 모두 ~Game() 이 안전망으로 Shutdown 을 한 번 더 호출(멱등).
 	}
+
+	// Flush Worker 종료: Game Shutdown 이후 더 이상 Job Push 가 없으므로
+	// 플래그를 내리고 WakeAll 로 Pop 대기 를 해제한다.
+	bFlushWorkerRun.store(false, std::memory_order_relaxed);
+	GlobalJobQueue::GetInstance().WakeAll();
+	if (FlushWorkerThread.joinable()) FlushWorkerThread.join();
+
 	SocketUtils::Cleanup();
 
 	// 메인 스레드 TLS SendBufferChunk를 명시적으로 반환한다.

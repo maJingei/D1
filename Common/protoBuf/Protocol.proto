@@ -26,11 +26,13 @@ message C_ENTER_GAME {
 }
 
 // Server -> Client: 필드 입장 응답. 본인의 PlayerID와 스폰 좌표, 그리고 이미 필드에 들어와 있던 다른 플레이어 목록을 함께 전달한다.
+// room_id 는 A안 4-방 분할 이후 추가된 필드로, 클라이언트는 수신 후 보관만 한다.
 message S_ENTER_GAME {
 	uint64 player_id = 1;
 	int32  tile_x    = 2;
 	int32  tile_y    = 3;
 	repeated PlayerInfo others = 4;
+	uint32 room_id   = 5;
 }
 
 // Server -> Client: 신규 플레이어 입장 브로드캐스트. 기존 접속자들에게만 송신한다(본인 제외).
@@ -50,20 +52,23 @@ enum Direction {
 
 // Client -> Server: 한 칸 이동 요청. 서버 권위적 모델이므로 클라는 이 패킷 송신 후 S_MOVE/S_MOVE_REJECT 수신 전까지 추가 이동 입력을 잠근다.
 message C_MOVE {
-	Direction dir = 1;
+	Direction dir        = 1;
+	uint64    client_seq = 2;
 }
 
 // Server -> Client: 이동 확정 브로드캐스트. GameRoom 내 모든 세션(요청자 포함)에 송신되어 그 시점부터 해당 플레이어가 TargetPos로 보간을 시작한다.
 message S_MOVE {
-	uint64    player_id = 1;
-	int32     tile_x    = 2;
-	int32     tile_y    = 3;
-	Direction dir       = 4;
+	uint64    player_id  = 1;
+	int32     tile_x     = 2;
+	int32     tile_y     = 3;
+	Direction dir        = 4;
+	uint64    client_seq = 5;
 }
 
 // Server -> Client: 이동 거절 회신. 충돌·점유 검사 실패 시 요청자에게만 현재 위치를 돌려주어 클라 입력 락을 해제하게 한다.
 message S_MOVE_REJECT {
-	uint64 player_id = 1;
-	int32  tile_x    = 2;
-	int32  tile_y    = 3;
+	uint64 player_id  = 1;
+	int32  tile_x     = 2;
+	int32  tile_y     = 3;
+	uint64 client_seq = 4;
 }

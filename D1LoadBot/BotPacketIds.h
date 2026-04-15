@@ -14,13 +14,13 @@ namespace D1LoadBot
 	 */
 	enum : uint16
 	{
-		PKT_C_LOGIN       = 1000,
-		PKT_S_LOGIN       = 1001,
-		PKT_C_ENTER_GAME  = 1002,
-		PKT_S_ENTER_GAME  = 1003,
-		PKT_S_SPAWN       = 1004,
-		PKT_C_MOVE        = 1005,
-		PKT_S_MOVE        = 1006,
+		PKT_C_LOGIN = 1000,
+		PKT_S_LOGIN = 1001,
+		PKT_C_ENTER_GAME = 1002,
+		PKT_S_ENTER_GAME = 1003,
+		PKT_S_SPAWN = 1004,
+		PKT_C_MOVE = 1005,
+		PKT_S_MOVE = 1006,
 		PKT_S_MOVE_REJECT = 1007,
 	};
 }

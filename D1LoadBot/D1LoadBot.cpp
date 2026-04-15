@@ -27,20 +27,40 @@
 #include "Memory/MemoryPool.h"
 #include "Network/ClientService.h"
 #include "Threading/ThreadManager.h"
+#include "Core/DiagCounters.h"
+#include "Job/GlobalJobQueue.h"
+#include "Job/JobSerializer.h"
 
 using namespace D1;
 using namespace D1LoadBot;
 
 namespace
 {
-	struct FConfig
+	/**
+	 * 부하 테스트 실행 파라미터.
+	 *
+	 * 하드코딩 기본값을 inline 초기화로 유지한다.
+	 * Args 파싱 없이 소스 수정만으로 값을 바꾸는 구조.
+	 */
+	struct FBotSettings
 	{
-		uint32 Sessions = 100;
+		/** 동시 접속 봇 세션 수. */
+		uint32 SessionCount = 500;
+
+		/** C_MOVE 전송 주기 (밀리초). */
 		uint32 MoveIntervalMs = 200;
-		uint32 DurationSec = 60;
-		std::string Host = "127.0.0.1";
-		uint16 Port = 9999;
-		std::string CsvPath = "loadbot_report.csv";
+
+		/** 부하 테스트 총 실행 시간 (초). */
+		uint32 TestDurationSec = 60;
+
+		/** 대상 서버 IP 또는 호스트명. */
+		std::string ServerHost = "127.0.0.1";
+
+		/** 대상 서버 포트. */
+		uint16 ServerPort = 9999;
+
+		/** 결과 CSV 출력 경로. */
+		std::string ReportCsvPath = "loadbot_report.csv";
 	};
 
 	// 워커 스레드 개수 = HW concurrency 의 2 배(최소 2, 최대 8). 봇은 1000개 세션까지 스케일해야 하므로 워커 복수 필요.
@@ -53,71 +73,11 @@ namespace
 	// 수집 주기 — Metrics 에 샘플을 병합하는 주기.
 	static constexpr uint32 kDrainTickMs = 100;
 
-	/** argv 파서. 알려진 옵션만 취급, 미지정 인자는 경고 후 무시. */
-	bool ParseArgs(int argc, char* argv[], FConfig& OutConfig)
-	{
-		for (int i = 1; i < argc; ++i)
-		{
-			const std::string Arg = argv[i];
-			auto NextArg = [&](const char* Name) -> const char*
-			{
-				if (i + 1 >= argc)
-				{
-					std::printf("[D1LoadBot] Missing value for %s\n", Name);
-					return nullptr;
-				}
-				return argv[++i];
-			};
-
-			if (Arg == "--sessions")
-			{
-				const char* V = NextArg("--sessions");
-				if (V == nullptr) return false;
-				OutConfig.Sessions = static_cast<uint32>(std::strtoul(V, nullptr, 10));
-			}
-			else if (Arg == "--move-interval-ms")
-			{
-				const char* V = NextArg("--move-interval-ms");
-				if (V == nullptr) return false;
-				OutConfig.MoveIntervalMs = static_cast<uint32>(std::strtoul(V, nullptr, 10));
-			}
-			else if (Arg == "--duration-sec")
-			{
-				const char* V = NextArg("--duration-sec");
-				if (V == nullptr) return false;
-				OutConfig.DurationSec = static_cast<uint32>(std::strtoul(V, nullptr, 10));
-			}
-			else if (Arg == "--host")
-			{
-				const char* V = NextArg("--host");
-				if (V == nullptr) return false;
-				OutConfig.Host = V;
-			}
-			else if (Arg == "--port")
-			{
-				const char* V = NextArg("--port");
-				if (V == nullptr) return false;
-				OutConfig.Port = static_cast<uint16>(std::strtoul(V, nullptr, 10));
-			}
-			else if (Arg == "--csv")
-			{
-				const char* V = NextArg("--csv");
-				if (V == nullptr) return false;
-				OutConfig.CsvPath = V;
-			}
-			else if (Arg == "--help" || Arg == "-h")
-			{
-				std::printf("Usage: D1LoadBot [--sessions N] [--move-interval-ms N] [--duration-sec N] [--host IP] [--port P] [--csv PATH]\n");
-				return false;
-			}
-			else
-			{
-				std::printf("[D1LoadBot] Unknown argument: %s\n", Arg.c_str());
-			}
-		}
-		return true;
-	}
-
+	/**
+	 * 적절한 IOCP 워커 스레드 개수를 결정한다.
+	 *
+	 * HW concurrency 의 2 배를 기준으로 [kMinWorkers, kMaxWorkers] 범위로 클램핑한다.
+	 */
 	uint32 DecideWorkerCount()
 	{
 		const uint32 HwRaw = std::thread::hardware_concurrency();
@@ -129,35 +89,34 @@ namespace
 	}
 }
 
-int main(int argc, char* argv[])
+int main()
 {
 #ifdef _DEBUG
 	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
 #endif
 
-	FConfig Config;
-	if (ParseArgs(argc, argv, Config) == false)
-		return 0;
+	// 실행 파라미터 — 기본값 그대로 사용. 값 변경은 FBotSettings 멤버를 직접 수정.
+	const FBotSettings Settings;
 
 	std::printf("[D1LoadBot] Start sessions=%u interval=%ums duration=%us target=%s:%u csv=%s\n",
-		Config.Sessions, Config.MoveIntervalMs, Config.DurationSec,
-		Config.Host.c_str(), Config.Port, Config.CsvPath.c_str());
+		Settings.SessionCount, Settings.MoveIntervalMs, Settings.TestDurationSec,
+		Settings.ServerHost.c_str(), Settings.ServerPort, Settings.ReportCsvPath.c_str());
 
 	ThreadManager::InitTLS();
 	PoolManager::GetInstance().Initialize(64);
 	SocketUtils::Init();
 
-	// Service 생성 — BotSession 팩토리 + 이동 주기 전달.
-	ClientServiceRef Service = std::make_shared<ClientService>();
-	const uint32 MoveIntervalLocal = Config.MoveIntervalMs;
-	Service->SetSessionFactory([MoveIntervalLocal]() -> SessionRef
+	// BotService 생성 — BotSession 팩토리에 이동 주기를 캡처해 전달한다.
+	ClientServiceRef BotClientService = std::make_shared<ClientService>();
+	const uint32 MoveIntervalCaptured = Settings.MoveIntervalMs;
+	BotClientService->SetSessionFactory([MoveIntervalCaptured]() -> SessionRef
 	{
 		auto Bot = std::make_shared<BotSession>();
-		Bot->SetMoveInterval(MoveIntervalLocal);
+		Bot->SetMoveInterval(MoveIntervalCaptured);
 		return Bot;
 	});
 
-	if (Service->Start() == false)
+	if (BotClientService->Start() == false)
 	{
 		std::printf("[D1LoadBot] Service start failed\n");
 		SocketUtils::Cleanup();
@@ -165,49 +124,67 @@ int main(int argc, char* argv[])
 		return 1;
 	}
 
-	// 워커 스레드. IOCP dispatch 루프.
-	ThreadManager& Manager = ThreadManager::GetInstance();
+	// IOCP dispatch 워커 스레드 풀 생성.
+	ThreadManager& ThreadMgr = ThreadManager::GetInstance();
 	const uint32 WorkerCount = DecideWorkerCount();
 	for (uint32 i = 0; i < WorkerCount; ++i)
 	{
-		Manager.CreateThread([Service]()
+		ThreadMgr.CreateThread([BotClientService]()
 		{
-			while (Service->GetIocpCore()->Dispatch())
+			while (BotClientService->GetIocpCore()->Dispatch())
 			{
 			}
 		});
 	}
-	Manager.Launch();
 
-	// Session 생성/연결.
-	NetAddress Address(Config.Host, Config.Port);
-	std::vector<std::shared_ptr<BotSession>> Bots;
-	Bots.reserve(Config.Sessions);
-	for (uint32 i = 0; i < Config.Sessions; ++i)
+	// Flush Worker — BotSession::Send 가 Serializer Job 으로 Push 되므로 소비 주체가 필요하다.
+	// 없으면 WSASend 가 영원히 발사되지 않아 서버에 아무 패킷도 도달하지 않는다.
+	std::atomic<bool> bFlushWorkerRunning{ true };
+	for (int32 i = 0; i < FLUSH_WORKER_COUNT; ++i)
 	{
-		SessionRef Created = Service->Connect(Address);
+		ThreadMgr.CreateThread([&bFlushWorkerRunning]()
+		{
+			while (true)
+			{
+				JobSerializerRef Serializer = GlobalJobQueue::GetInstance().Pop(bFlushWorkerRunning);
+				if (Serializer == nullptr)
+					break;
+				Serializer->FlushJob();
+			}
+		});
+	}
+
+	ThreadMgr.Launch();
+
+	// 봇 세션 생성 및 연결 요청.
+	NetAddress ServerAddress(Settings.ServerHost, Settings.ServerPort);
+	std::vector<std::shared_ptr<BotSession>> BotSessions;
+	BotSessions.reserve(Settings.SessionCount);
+	for (uint32 i = 0; i < Settings.SessionCount; ++i)
+	{
+		SessionRef Created = BotClientService->Connect(ServerAddress);
 		if (Created == nullptr)
 		{
 			std::printf("[D1LoadBot] Connect failed at index=%u\n", i);
 			continue;
 		}
 		auto Bot = std::static_pointer_cast<BotSession>(Created);
-		Bots.push_back(Bot);
+		BotSessions.push_back(Bot);
 	}
-	std::printf("[D1LoadBot] Connect requested %zu sessions\n", Bots.size());
+	std::printf("[D1LoadBot] Connect requested %zu sessions\n", BotSessions.size());
 
-	// 측정 초기화.
-	Metrics Collect;
-	Collect.Start();
+	// 메트릭 수집기 초기화.
+	Metrics MetricsAggregator;
+	MetricsAggregator.Start();
 
-	// 펌프 + 드레인 루프. 메인 스레드가 tick 타이머 역할을 한다.
-	std::atomic<bool> bStop{ false };
-	std::thread PumpThread([&bStop, &Bots]()
+	// 펌프 스레드 — 매 kPumpTickMs 마다 각 봇의 PumpMove 를 호출해 이동 타이머를 구동한다.
+	std::atomic<bool> bPumpShouldStop{ false };
+	std::thread MoveScheduleThread([&bPumpShouldStop, &BotSessions]()
 	{
 		ThreadManager::InitTLS();
-		while (bStop.load(std::memory_order_relaxed) == false)
+		while (bPumpShouldStop.load(std::memory_order_relaxed) == false)
 		{
-			for (auto& Bot : Bots)
+			for (auto& Bot : BotSessions)
 			{
 				if (Bot) Bot->PumpMove();
 			}
@@ -217,55 +194,66 @@ int main(int argc, char* argv[])
 		SendBufferManager::ShutdownThread();
 	});
 
+	// 메인 드레인 루프 — TestDurationSec 동안 샘플·카운터를 kDrainTickMs 주기로 병합한다.
 	const auto StartedAt = std::chrono::steady_clock::now();
 	while (true)
 	{
 		const auto Now = std::chrono::steady_clock::now();
 		const auto Elapsed = std::chrono::duration_cast<std::chrono::seconds>(Now - StartedAt).count();
-		if (Elapsed >= static_cast<int64>(Config.DurationSec))
+		if (Elapsed >= static_cast<int64>(Settings.TestDurationSec))
 			break;
 
-		// 샘플 병합.
-		for (auto& Bot : Bots)
+		// 샘플 + drop/timeout 카운터 병합.
+		for (auto& Bot : BotSessions)
 		{
 			if (Bot == nullptr) continue;
 			std::vector<FLatencySample> Samples = Bot->DrainSamples();
 			if (Samples.empty() == false)
-				Collect.Merge(Samples);
+				MetricsAggregator.Merge(Samples);
+			MetricsAggregator.MergeDropCount(Bot->DrainDropCount());
+			MetricsAggregator.MergeTimeoutCount(Bot->DrainTimeoutCount());
 		}
 		std::this_thread::sleep_for(std::chrono::milliseconds(kDrainTickMs));
 	}
 
-	// 펌프 정지 + 최종 드레인.
-	bStop.store(true, std::memory_order_relaxed);
-	if (PumpThread.joinable()) PumpThread.join();
+	// 펌프 정지 후 최종 드레인 — 테스트 종료 직전 잔여 샘플을 모두 수집한다.
+	bPumpShouldStop.store(true, std::memory_order_relaxed);
+	if (MoveScheduleThread.joinable()) MoveScheduleThread.join();
 
-	for (auto& Bot : Bots)
+	for (auto& Bot : BotSessions)
 	{
 		if (Bot == nullptr) continue;
 		Bot->RequestShutdown();
+		// SendMove와 Move패킷 수신으로 저장된 샘플 배열을 가져와 테스트 분석기에 합칩니다.
 		std::vector<FLatencySample> Samples = Bot->DrainSamples();
 		if (Samples.empty() == false)
-			Collect.Merge(Samples);
+			MetricsAggregator.Merge(Samples);
+		MetricsAggregator.MergeDropCount(Bot->DrainDropCount());
+		MetricsAggregator.MergeTimeoutCount(Bot->DrainTimeoutCount());
 	}
 
-	Collect.Report(Config.CsvPath, Config.DurationSec, Config.Sessions, Config.MoveIntervalMs);
+	MetricsAggregator.Report(Settings.ReportCsvPath, Settings.TestDurationSec, Settings.SessionCount, Settings.MoveIntervalMs);
 
 	// 종료 시퀀스 — D1Server 와 동일한 순서 (Service.Stop → 워커 종료 신호 → Join → Service 해제 → Pool Shutdown).
 	std::printf("[D1LoadBot] Shutting down...\n");
-	Service->Stop();
+	BotClientService->Stop();
 
 	for (uint32 i = 0; i < WorkerCount; ++i)
-		::PostQueuedCompletionStatus(Service->GetIocpCore()->GetHandle(), 0, 0, nullptr);
-	Manager.JoinAll();
+		::PostQueuedCompletionStatus(BotClientService->GetIocpCore()->GetHandle(), 0, 0, nullptr);
 
-	Bots.clear();
-	Service.reset();
+	// Flush Worker 종료: Pop 대기 중인 워커를 깨워 nullptr 을 받게 만든다.
+	bFlushWorkerRunning.store(false, std::memory_order_relaxed);
+	GlobalJobQueue::GetInstance().WakeAll();
+
+	ThreadMgr.JoinAll();
+
+	BotSessions.clear();
+	BotClientService.reset();
 
 	SocketUtils::Cleanup();
 	SendBufferManager::ShutdownThread();
 	PoolManager::GetInstance().Shutdown();
-	Manager.DestroyAllThreads();
+	ThreadMgr.DestroyAllThreads();
 
 	std::printf("[D1LoadBot] Done\n");
 	return 0;

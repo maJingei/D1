@@ -21,10 +21,13 @@ namespace D1
 	 *     큐 크기만큼 감소시킨다. 남은 ReserveCount > 0 이면 Flush 도중 새 Job 이 Push 됐다는
 	 *     의미이므로 GlobalJobQueue 에 다시 self 를 등록하여 누락 없이 처리한다.
 	 *
-	 * GameRoom 처럼 파생 클래스가 shared_ptr 로 관리되어야 GlobalJobQueue push 가 가능하므로
-	 * std::enable_shared_from_this 를 상속한다.
+	 * enable_shared_from_this 를 이 클래스에서 제거한 이유:
+	 *   Session 처럼 다른 경로(IocpObject)로 이미 enable_shared_from_this 를 보유한 파생이
+	 *   JobSerializer 도 상속할 때 다중 enable_shared_from_this 계보 충돌이 발생한다.
+	 *   이를 방지하기 위해 GlobalJobQueue 에 등록할 shared_ptr<JobSerializer> 는
+	 *   GetSerializerRef() 가상 함수로 파생 클래스에서 직접 공급받는다.
 	 */
-	class JobSerializer : public std::enable_shared_from_this<JobSerializer>
+	class JobSerializer
 	{
 	public:
 		virtual ~JobSerializer() = default;
@@ -37,6 +40,18 @@ namespace D1
 		 * Flush 후 남은 예약이 있으면 GlobalJobQueue 에 재등록한다.
 		 */
 		void FlushJob();
+
+	protected:
+		/**
+		 * 파생 클래스가 자신의 enable_shared_from_this 계보로 얻은 shared_ptr 를
+		 * static_pointer_cast<JobSerializer> 로 반환한다.
+		 *
+		 * - GameRoom  : enable_shared_from_this<GameRoom>::shared_from_this() 캐스트
+		 * - Session   : IocpObject(enable_shared_from_this<IocpObject>)::shared_from_this() 캐스트
+		 *
+		 * GlobalJobQueue 등록 시 사용하므로 반드시 유효한 shared_ptr 를 반환해야 한다.
+		 */
+		virtual JobSerializerRef GetSerializerRef() = 0;
 
 	private:
 		JobQueue Queue;

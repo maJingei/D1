@@ -1,12 +1,18 @@
 #include "Session.h"
 #include "Service.h"
 #include "SocketUtils.h"
+#include "../Core/DiagCounters.h"
+#include "../Job/Job.h"
 #include <iostream>
 #include <vector>
 
 namespace D1
 {
-	Session::Session() = default;
+	Session::Session()
+	{
+		// Serializer 는 Session 이 shared_ptr 로 생성된 직후 InitSerializer 에서 초기화한다.
+		// 생성자 시점에는 shared_from_this() 를 아직 호출할 수 없으므로 여기서는 생성하지 않는다.
+	}
 
 	Session::~Session()
 	{
@@ -42,6 +48,14 @@ namespace D1
 	{
 		if (bDisconnected) return;
 
+		// Serializer 가 아직 초기화되지 않았으면 지금 생성한다.
+		// RegisterRecv 는 OnConnected 에서 최초 호출되며, 그 시점에는 shared_ptr 이 확정됨.
+		if (Serializer == nullptr)
+		{
+			SessionRef Self = std::static_pointer_cast<Session>(shared_from_this());
+			Serializer = std::make_shared<FSessionSerializer>(Self);
+		}
+
 		HoldForIo(RecvIocpEvent);
 
 		// 수신 전 공간 확보: ReadPos==WritePos면 리셋, 잔여 있으면 앞으로 memmove
@@ -56,7 +70,6 @@ namespace D1
 		if (Result == SOCKET_ERROR && ::WSAGetLastError() != WSA_IO_PENDING)
 		{
 			std::cout << "[Session] WSARecv failed: " << ::WSAGetLastError() << std::endl;
-			// 게시 실패: HoldForIo가 잡아둔 self-ref를 즉시 해제한다.
 			RecvIocpEvent.Owner.reset();
 		}
 	}
@@ -65,24 +78,21 @@ namespace D1
 	{
 		if (bDisconnected || InSendBuffer == nullptr) return;
 
-		// 큐에 적재하고, 현재 WSASend가 진행 중이 아닌 경우에만 한 번 트리거한다.
-		// 이후 추가 Send 호출은 플래그가 true인 동안 큐에 쌓이기만 하고,
-		// 전송 완료 시 ProcessSend가 남은 큐를 한 번의 WSASend로 묶어 flush한다.
-		bool ShouldRegisterSend = false;
+		// Serializer 가 아직 초기화되지 않았으면 지금 생성한다.
+		// (RegisterRecv 이전에 Send 가 호출될 수 있는 경로 대비)
+		if (Serializer == nullptr)
 		{
-			WriteLockGuard Lock(SendLock);
-			SendQueue.push(std::move(InSendBuffer));
-			if (bSendRegistered == false)
-			{
-				bSendRegistered = true;
-				ShouldRegisterSend = true;
-			}
+			SessionRef Self = std::static_pointer_cast<Session>(shared_from_this());
+			Serializer = std::make_shared<FSessionSerializer>(Self);
 		}
 
-		if (ShouldRegisterSend)
+		// DoSend 를 Job 으로 래핑하여 Serializer 에 Push 한다.
+		// 같은 세션에 대한 Send 호출 순서가 FIFO 로 보장된다.
+		std::shared_ptr<FSessionSerializer> S = Serializer;
+		Serializer->PushJob(std::make_shared<Job>([this, S, InSendBuffer]()
 		{
-			RegisterSend();
-		}
+			DoSend(InSendBuffer);
+		}));
 	}
 
 	void Session::RegisterSend()
@@ -92,15 +102,16 @@ namespace D1
 		HoldForIo(SendIocpEvent);
 
 		// Step 1: 현재 큐의 모든 SendBuffer를 꺼내 SendEvent가 보관한다.
-		//         (shared_ptr 참조로 WSASend 진행 동안 Chunk 메모리 수명 보장)
+		//         Serializer 직렬화 안에서만 호출되므로 락 불필요.
+		while (SendQueue.empty() == false)
 		{
-			WriteLockGuard Lock(SendLock);
-			while (SendQueue.empty() == false)
-			{
-				SendIocpEvent.SendBuffers.push_back(std::move(SendQueue.front()));
-				SendQueue.pop();
-			}
+			SendIocpEvent.SendBuffers.push_back(std::move(SendQueue.front()));
+			SendQueue.pop();
 		}
+
+		// [DIAG] probe: WSASend 한 건당 배치 크기 (SendBuffers 확정 직후)
+		GSendBatchSizeSum.fetch_add(static_cast<uint64>(SendIocpEvent.SendBuffers.size()), std::memory_order_relaxed);
+		GSendBatchSizeCount.fetch_add(1, std::memory_order_relaxed);
 
 		// Step 2: WSABUF 배열로 구성 → 한 번의 WSASend로 Scatter-Gather 전송
 		std::vector<WSABUF> WsaBufs;
@@ -118,11 +129,9 @@ namespace D1
 		if (Result == SOCKET_ERROR && ::WSAGetLastError() != WSA_IO_PENDING)
 		{
 			std::cout << "[Session] WSASend failed: " << ::WSAGetLastError() << std::endl;
-			// 실패 시 이벤트에 보관된 버퍼들 해제 + 플래그 롤백
 			SendIocpEvent.SendBuffers.clear();
-			// 게시 실패: HoldForIo가 잡아둔 self-ref를 즉시 해제한다.
 			SendIocpEvent.Owner.reset();
-			WriteLockGuard Lock(SendLock);
+			// WSASend 실패 시 플래그를 내려 다음 Send 가 재트리거할 수 있게 한다.
 			bSendRegistered = false;
 		}
 	}
@@ -142,7 +151,6 @@ namespace D1
 		if (Result == FALSE && ::WSAGetLastError() != WSA_IO_PENDING)
 		{
 			std::cout << "[Session] ConnectEx failed: " << ::WSAGetLastError() << std::endl;
-			// 게시 실패: HoldForIo가 잡아둔 self-ref를 즉시 해제한다.
 			ConnectIocpEvent.Owner.reset();
 		}
 	}
@@ -163,8 +171,6 @@ namespace D1
 		if (bDisconnected) return;
 		bDisconnected = true;
 
-		// ReleaseSession에서 Sessions에서 제거되어도 이 함수가 끝날 때까지 수명 보장.
-		// shared_from_this()는 베이스 IocpObject가 제공하므로 Session 타입으로 downcast 필요.
 		SessionRef Self = std::static_pointer_cast<Session>(shared_from_this());
 
 		if (Socket != INVALID_SOCKET)
@@ -182,14 +188,12 @@ namespace D1
 	void Session::ProcessRecv(int32 NumOfBytes)
 	{
 		if (bDisconnected) return;
-		// 연결 종료 감지
 		if (NumOfBytes == 0)
 		{
 			ProcessDisconnect();
 			return;
 		}
 
-		// 이번 WSARecv로 수신된 바이트를 WritePos에 반영
 		if (Recv.OnWrite(NumOfBytes) == false)
 		{
 			std::cout << "[Session] Recv OnWrite overflow (NumOfBytes=" << NumOfBytes << ", free=" << Recv.GetFreeSize() << ")" << std::endl;
@@ -197,7 +201,6 @@ namespace D1
 			return;
 		}
 
-		// 파생 OnRecv에 누적된 모든 미처리 바이트를 넘긴다
 		const int32 DataSize = Recv.GetDataSize();
 		const int32 Processed = OnRecv(Recv.ReadPtr(), DataSize);
 
@@ -208,13 +211,13 @@ namespace D1
 			return;
 		}
 
-		// 다음 수신 대기. Send 경로는 별개로 Scatter-Gather로 진행되므로 여기서 즉시 재등록한다.
 		RegisterRecv();
 	}
 
 	void Session::ProcessSend(int32 NumOfBytes)
 	{
 		// 전송 완료된 SendBuffer들을 먼저 해제한다 (Chunk 참조 감소).
+		// 이 작업은 IOCP 워커에서 직접 수행해도 안전하다 (SendBuffers 는 이 시점에 전용).
 		SendIocpEvent.SendBuffers.clear();
 
 		if (bDisconnected) return;
@@ -224,24 +227,48 @@ namespace D1
 			return;
 		}
 
+		// DoProcessSend 를 Job 으로 래핑하여 Serializer 에 Push 한다.
+		// DoSend 와 같은 직렬화 파이프라인에서 실행되므로 SendQueue/bSendRegistered 경쟁 없음.
+		if (Serializer == nullptr) return;
+		Serializer->PushJob(std::make_shared<Job>([this, NumOfBytes]()
+		{
+			DoProcessSend(NumOfBytes);
+		}));
+	}
+
+	/*-----------------------------------------------------------------*/
+	/*  Send 직렬화 내부 메서드 (FlushJob 컨텍스트 전용)               */
+	/*-----------------------------------------------------------------*/
+
+	void Session::DoSend(SendBufferRef InSendBuffer)
+	{
+		// [DIAG] probe: Send 진입 경로 판단은 Job 실행 시점(DoSend) 기준.
+		SendQueue.push(std::move(InSendBuffer));
+		if (bSendRegistered == false)
+		{
+			bSendRegistered = true;
+			// [DIAG] probe: WSASend 트리거 경로 (RegisterSend 예정)
+			GSendRegisterCount.fetch_add(1, std::memory_order_relaxed);
+			RegisterSend();
+		}
+		else
+		{
+			// [DIAG] probe: 이미 WSASend 진행 중 — 큐에 적재만
+			GSendAppendCount.fetch_add(1, std::memory_order_relaxed);
+		}
+	}
+
+	void Session::DoProcessSend(int32 NumOfBytes)
+	{
 		OnSend(NumOfBytes);
 
-		// 전송 중에 새로 쌓인 SendBuffer가 있으면 다시 RegisterSend,
-		// 없으면 bSendRegistered를 내려 다음 Send가 트리거를 걸 수 있게 한다.
-		bool ShouldRegisterSend = false;
+		// 전송 중에 새로 쌓인 SendBuffer 가 있으면 다시 RegisterSend,
+		// 없으면 bSendRegistered 를 내려 다음 DoSend 가 트리거를 걸 수 있게 한다.
+		if (SendQueue.empty())
 		{
-			WriteLockGuard Lock(SendLock);
-			if (SendQueue.empty())
-			{
-				bSendRegistered = false;
-			}
-			else
-			{
-				ShouldRegisterSend = true;
-			}
+			bSendRegistered = false;
 		}
-
-		if (ShouldRegisterSend)
+		else
 		{
 			RegisterSend();
 		}
@@ -259,9 +286,8 @@ namespace D1
 	int32 Session::OnRecv(uint8* Data, int32 NumOfBytes)
 	{
 		// Echo 기본 동작: 누적된 바이트를 Chunk 크기 이하 단위로 쪼개어 Send.
-		// 한 번의 WSASend는 SendQueue에 쌓인 모든 버퍼를 Scatter-Gather로 묶어 전송한다.
 		int32 Remaining = NumOfBytes;
-		int32 Offset    = 0;
+		int32 Offset = 0;
 		while (Remaining > 0)
 		{
 			const int32 BytesToSend = Remaining < SendBufferChunk::ChunkSize ? Remaining : SendBufferChunk::ChunkSize;
@@ -272,7 +298,7 @@ namespace D1
 
 			Send(Buf);
 
-			Offset    += BytesToSend;
+			Offset += BytesToSend;
 			Remaining -= BytesToSend;
 		}
 		return NumOfBytes;
@@ -280,7 +306,7 @@ namespace D1
 
 	void Session::OnSend(int32 NumOfBytes)
 	{
-		std::cout << "[Session] Sent " << NumOfBytes << " bytes" << std::endl;
+		// std::cout << "[Session] Sent " << NumOfBytes << " bytes" << std::endl;
 	}
 
 	void Session::OnDisconnected()

@@ -806,6 +806,7 @@ class S_ENTER_GAME final :
     kPlayerIdFieldNumber = 1,
     kTileXFieldNumber = 2,
     kTileYFieldNumber = 3,
+    kRoomIdFieldNumber = 5,
   };
   // repeated .Protocol.PlayerInfo others = 4;
   int others_size() const;
@@ -852,6 +853,15 @@ class S_ENTER_GAME final :
   void _internal_set_tile_y(::PROTOBUF_NAMESPACE_ID::int32 value);
   public:
 
+  // uint32 room_id = 5;
+  void clear_room_id();
+  ::PROTOBUF_NAMESPACE_ID::uint32 room_id() const;
+  void set_room_id(::PROTOBUF_NAMESPACE_ID::uint32 value);
+  private:
+  ::PROTOBUF_NAMESPACE_ID::uint32 _internal_room_id() const;
+  void _internal_set_room_id(::PROTOBUF_NAMESPACE_ID::uint32 value);
+  public:
+
   // @@protoc_insertion_point(class_scope:Protocol.S_ENTER_GAME)
  private:
   class _Internal;
@@ -863,6 +873,7 @@ class S_ENTER_GAME final :
   ::PROTOBUF_NAMESPACE_ID::uint64 player_id_;
   ::PROTOBUF_NAMESPACE_ID::int32 tile_x_;
   ::PROTOBUF_NAMESPACE_ID::int32 tile_y_;
+  ::PROTOBUF_NAMESPACE_ID::uint32 room_id_;
   mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   friend struct ::TableStruct_Protocol_2eproto;
 };
@@ -1130,8 +1141,18 @@ class C_MOVE final :
   // accessors -------------------------------------------------------
 
   enum : int {
+    kClientSeqFieldNumber = 2,
     kDirFieldNumber = 1,
   };
+  // uint64 client_seq = 2;
+  void clear_client_seq();
+  ::PROTOBUF_NAMESPACE_ID::uint64 client_seq() const;
+  void set_client_seq(::PROTOBUF_NAMESPACE_ID::uint64 value);
+  private:
+  ::PROTOBUF_NAMESPACE_ID::uint64 _internal_client_seq() const;
+  void _internal_set_client_seq(::PROTOBUF_NAMESPACE_ID::uint64 value);
+  public:
+
   // .Protocol.Direction dir = 1;
   void clear_dir();
   ::Protocol::Direction dir() const;
@@ -1148,6 +1169,7 @@ class C_MOVE final :
   template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
   typedef void InternalArenaConstructable_;
   typedef void DestructorSkippable_;
+  ::PROTOBUF_NAMESPACE_ID::uint64 client_seq_;
   int dir_;
   mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   friend struct ::TableStruct_Protocol_2eproto;
@@ -1265,6 +1287,7 @@ class S_MOVE final :
     kPlayerIdFieldNumber = 1,
     kTileXFieldNumber = 2,
     kTileYFieldNumber = 3,
+    kClientSeqFieldNumber = 5,
     kDirFieldNumber = 4,
   };
   // uint64 player_id = 1;
@@ -1294,6 +1317,15 @@ class S_MOVE final :
   void _internal_set_tile_y(::PROTOBUF_NAMESPACE_ID::int32 value);
   public:
 
+  // uint64 client_seq = 5;
+  void clear_client_seq();
+  ::PROTOBUF_NAMESPACE_ID::uint64 client_seq() const;
+  void set_client_seq(::PROTOBUF_NAMESPACE_ID::uint64 value);
+  private:
+  ::PROTOBUF_NAMESPACE_ID::uint64 _internal_client_seq() const;
+  void _internal_set_client_seq(::PROTOBUF_NAMESPACE_ID::uint64 value);
+  public:
+
   // .Protocol.Direction dir = 4;
   void clear_dir();
   ::Protocol::Direction dir() const;
@@ -1313,6 +1345,7 @@ class S_MOVE final :
   ::PROTOBUF_NAMESPACE_ID::uint64 player_id_;
   ::PROTOBUF_NAMESPACE_ID::int32 tile_x_;
   ::PROTOBUF_NAMESPACE_ID::int32 tile_y_;
+  ::PROTOBUF_NAMESPACE_ID::uint64 client_seq_;
   int dir_;
   mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   friend struct ::TableStruct_Protocol_2eproto;
@@ -1430,6 +1463,7 @@ class S_MOVE_REJECT final :
     kPlayerIdFieldNumber = 1,
     kTileXFieldNumber = 2,
     kTileYFieldNumber = 3,
+    kClientSeqFieldNumber = 4,
   };
   // uint64 player_id = 1;
   void clear_player_id();
@@ -1458,6 +1492,15 @@ class S_MOVE_REJECT final :
   void _internal_set_tile_y(::PROTOBUF_NAMESPACE_ID::int32 value);
   public:
 
+  // uint64 client_seq = 4;
+  void clear_client_seq();
+  ::PROTOBUF_NAMESPACE_ID::uint64 client_seq() const;
+  void set_client_seq(::PROTOBUF_NAMESPACE_ID::uint64 value);
+  private:
+  ::PROTOBUF_NAMESPACE_ID::uint64 _internal_client_seq() const;
+  void _internal_set_client_seq(::PROTOBUF_NAMESPACE_ID::uint64 value);
+  public:
+
   // @@protoc_insertion_point(class_scope:Protocol.S_MOVE_REJECT)
  private:
   class _Internal;
@@ -1468,6 +1511,7 @@ class S_MOVE_REJECT final :
   ::PROTOBUF_NAMESPACE_ID::uint64 player_id_;
   ::PROTOBUF_NAMESPACE_ID::int32 tile_x_;
   ::PROTOBUF_NAMESPACE_ID::int32 tile_y_;
+  ::PROTOBUF_NAMESPACE_ID::uint64 client_seq_;
   mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   friend struct ::TableStruct_Protocol_2eproto;
 };
@@ -1787,6 +1831,26 @@ S_ENTER_GAME::others() const {
   return others_;
 }
 
+// uint32 room_id = 5;
+inline void S_ENTER_GAME::clear_room_id() {
+  room_id_ = 0u;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint32 S_ENTER_GAME::_internal_room_id() const {
+  return room_id_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint32 S_ENTER_GAME::room_id() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_ENTER_GAME.room_id)
+  return _internal_room_id();
+}
+inline void S_ENTER_GAME::_internal_set_room_id(::PROTOBUF_NAMESPACE_ID::uint32 value) {
+  
+  room_id_ = value;
+}
+inline void S_ENTER_GAME::set_room_id(::PROTOBUF_NAMESPACE_ID::uint32 value) {
+  _internal_set_room_id(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_ENTER_GAME.room_id)
+}
+
 // -------------------------------------------------------------------
 
 // S_SPAWN
@@ -1875,6 +1939,26 @@ inline void C_MOVE::set_dir(::Protocol::Direction value) {
   // @@protoc_insertion_point(field_set:Protocol.C_MOVE.dir)
 }
 
+// uint64 client_seq = 2;
+inline void C_MOVE::clear_client_seq() {
+  client_seq_ = uint64_t{0u};
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint64 C_MOVE::_internal_client_seq() const {
+  return client_seq_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint64 C_MOVE::client_seq() const {
+  // @@protoc_insertion_point(field_get:Protocol.C_MOVE.client_seq)
+  return _internal_client_seq();
+}
+inline void C_MOVE::_internal_set_client_seq(::PROTOBUF_NAMESPACE_ID::uint64 value) {
+  
+  client_seq_ = value;
+}
+inline void C_MOVE::set_client_seq(::PROTOBUF_NAMESPACE_ID::uint64 value) {
+  _internal_set_client_seq(value);
+  // @@protoc_insertion_point(field_set:Protocol.C_MOVE.client_seq)
+}
+
 // -------------------------------------------------------------------
 
 // S_MOVE
@@ -1959,6 +2043,26 @@ inline void S_MOVE::set_dir(::Protocol::Direction value) {
   // @@protoc_insertion_point(field_set:Protocol.S_MOVE.dir)
 }
 
+// uint64 client_seq = 5;
+inline void S_MOVE::clear_client_seq() {
+  client_seq_ = uint64_t{0u};
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint64 S_MOVE::_internal_client_seq() const {
+  return client_seq_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint64 S_MOVE::client_seq() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_MOVE.client_seq)
+  return _internal_client_seq();
+}
+inline void S_MOVE::_internal_set_client_seq(::PROTOBUF_NAMESPACE_ID::uint64 value) {
+  
+  client_seq_ = value;
+}
+inline void S_MOVE::set_client_seq(::PROTOBUF_NAMESPACE_ID::uint64 value) {
+  _internal_set_client_seq(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_MOVE.client_seq)
+}
+
 // -------------------------------------------------------------------
 
 // S_MOVE_REJECT
@@ -2021,6 +2125,26 @@ inline void S_MOVE_REJECT::_internal_set_tile_y(::PROTOBUF_NAMESPACE_ID::int32 v
 inline void S_MOVE_REJECT::set_tile_y(::PROTOBUF_NAMESPACE_ID::int32 value) {
   _internal_set_tile_y(value);
   // @@protoc_insertion_point(field_set:Protocol.S_MOVE_REJECT.tile_y)
+}
+
+// uint64 client_seq = 4;
+inline void S_MOVE_REJECT::clear_client_seq() {
+  client_seq_ = uint64_t{0u};
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint64 S_MOVE_REJECT::_internal_client_seq() const {
+  return client_seq_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint64 S_MOVE_REJECT::client_seq() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_MOVE_REJECT.client_seq)
+  return _internal_client_seq();
+}
+inline void S_MOVE_REJECT::_internal_set_client_seq(::PROTOBUF_NAMESPACE_ID::uint64 value) {
+  
+  client_seq_ = value;
+}
+inline void S_MOVE_REJECT::set_client_seq(::PROTOBUF_NAMESPACE_ID::uint64 value) {
+  _internal_set_client_seq(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_MOVE_REJECT.client_seq)
 }
 
 #ifdef __GNUC__
