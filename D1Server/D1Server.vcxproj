@@ -184,6 +184,7 @@
     <ClInclude Include="ClientPacketHandler.h" />
     <ClInclude Include="GameServerSession.h" />
     <ClInclude Include="GameRoom.h" />
+    <ClInclude Include="GameRoomManager.h" />
     <ClInclude Include="$(SolutionDir)Common\UCollisionMap.h" />
   </ItemGroup>
   <ItemGroup>
@@ -192,6 +193,7 @@
     <ClCompile Include="ClientPacketHandler.cpp" />
     <ClCompile Include="GameServerSession.cpp" />
     <ClCompile Include="GameRoom.cpp" />
+    <ClCompile Include="GameRoomManager.cpp" />
     <ClCompile Include="$(SolutionDir)Common\UCollisionMap.cpp" />
   </ItemGroup>
   <ItemGroup>

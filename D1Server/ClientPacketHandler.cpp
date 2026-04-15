@@ -1,5 +1,6 @@
 #include "ClientPacketHandler.h"
 #include "GameRoom.h"
+#include "GameRoomManager.h"
 #include "GameServerSession.h"
 #include "MoveCounter.h"
 #include <iostream>
@@ -37,39 +38,49 @@ bool Handle_C_MOVE(PacketSessionRef& session, Protocol::C_MOVE& pkt)
 	// 부하 벤치마크용 수신 카운터. 진입부에 한 번만 증가시키고, 이후 경로는 그대로 유지한다.
 	GMoveCounter.fetch_add(1, std::memory_order_relaxed);
 
-	// 권위적 이동 검증은 GameRoom 에 위임 — 세션을 PlayerID 로 식별한 뒤 TryMove 내부에서 점유/차단 검사 + broadcast/reject 처리.
 	auto GameSession = std::static_pointer_cast<GameServerSession>(session);
 	const uint64 PlayerID = GameSession->GetPlayerID();
 	if (PlayerID == 0)
 		return false;
 
-	GameRoom::Get()->TryMove(PlayerID, pkt.dir());
+	// Enter 전 패킷은 RoomID=-1 이므로 무시한다.
+	const int32 RoomID = GameSession->GetRoomID();
+	if (RoomID < 0)
+		return true;
+
+	// 세션에 기록된 방의 TryMove 만 호출한다.
+	GameRoomManager::GetInstance().GetRoom(RoomID)->TryMove(PlayerID, pkt.dir(), pkt.client_seq());
 	return true;
 }
 
 bool Handle_C_ENTER_GAME(PacketSessionRef& session, Protocol::C_ENTER_GAME& /*pkt*/)
 {
-	// 1. PacketSession 참조를 GameServerSession 으로 캐스팅. 본 프로젝트의 서버는 해당 타입만 수용하므로 안전.
+	// 1. PacketSession 참조를 GameServerSession 으로 캐스팅.
 	auto GameSession = std::static_pointer_cast<GameServerSession>(session);
 
-	// 2. Room 에 입장 처리 — PlayerID/스폰 좌표 발급 + 기존 플레이어 스냅샷 수신
+	// 2. GameRoomManager 에서 전역 PlayerID 발급 + Round-robin 방 결정 + 방 입장.
+	int32 RoomID = 0;
 	int32 SpawnTileX = 0;
 	int32 SpawnTileY = 0;
 	std::vector<GameRoom::PlayerEntry> Others;
-	const uint64 NewPlayerID = GameRoom::Get()->Enter(GameSession, SpawnTileX, SpawnTileY, Others);
+	const uint64 NewPlayerID = GameRoomManager::GetInstance().EnterAnyRoom(
+		GameSession, RoomID, SpawnTileX, SpawnTileY, Others);
 
-	// 3. Session 에 PlayerID 기록 — 이후 disconnect 시 Leave 에 사용된다
+	// 3. Session 에 PlayerID, RoomID 기록 — 이후 C_MOVE 와 disconnect 시 Leave 에 사용된다.
 	GameSession->SetPlayerID(NewPlayerID);
+	GameSession->SetRoomID(RoomID);
 
 	std::cout << "[Server] C_ENTER_GAME: newId=" << NewPlayerID
+		<< " room=" << RoomID
 		<< " spawn=(" << SpawnTileX << "," << SpawnTileY << ")"
 		<< " others=" << Others.size() << "\n";
 
-	// 4. 신규 입장자에게 S_ENTER_GAME 응답 — 본인 ID/좌표 + 기존 플레이어 스냅샷 포함
+	// 4. 신규 입장자에게 S_ENTER_GAME 응답 — 본인 ID/좌표/방 + 기존 플레이어 스냅샷 포함.
 	Protocol::S_ENTER_GAME EnterRes;
 	EnterRes.set_player_id(NewPlayerID);
 	EnterRes.set_tile_x(SpawnTileX);
 	EnterRes.set_tile_y(SpawnTileY);
+	EnterRes.set_room_id(static_cast<uint32>(RoomID));
 	for (const auto& Entry : Others)
 	{
 		Protocol::PlayerInfo* Info = EnterRes.add_others();
@@ -79,12 +90,13 @@ bool Handle_C_ENTER_GAME(PacketSessionRef& session, Protocol::C_ENTER_GAME& /*pk
 	}
 	GameSession->Send(ClientPacketHandler::MakeSendBuffer(EnterRes));
 
-	// 5. 기존 접속자들에게 S_SPAWN 브로드캐스트 — 본인 제외
+	// 5. 기존 접속자들에게 S_SPAWN 브로드캐스트 — 본인 제외, 같은 방에만.
 	Protocol::S_SPAWN SpawnPkt;
 	SpawnPkt.set_player_id(NewPlayerID);
 	SpawnPkt.set_tile_x(SpawnTileX);
 	SpawnPkt.set_tile_y(SpawnTileY);
-	GameRoom::Get()->Broadcast(ClientPacketHandler::MakeSendBuffer(SpawnPkt), NewPlayerID);
+	GameRoomManager::GetInstance().GetRoom(RoomID)->Broadcast(
+		ClientPacketHandler::MakeSendBuffer(SpawnPkt), NewPlayerID);
 
 	return true;
 }

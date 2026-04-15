@@ -8,6 +8,7 @@
 
 #include <atomic>
 #include <memory>
+#include <mutex>
 #include <unordered_map>
 #include <vector>
 
@@ -26,17 +27,16 @@ namespace D1
 	 * JobSerializer 를 상속하여 모든 상태 변경을 단일 Job 직렬 실행으로 보호한다.
 	 * std::mutex 없이 Flush Worker 가 순차 실행하므로 경쟁 조건이 발생하지 않는다.
 	 *
-	 * 외부 API (Enter/Leave/TryMove/Broadcast) 는 PushJob 래핑 형태로 제공하고,
-	 * 실제 상태 변경은 Do* private 메서드 안에서 수행한다.
+	 * A안 4-방 분할 이후: 싱글톤 Get() 제거. GameRoomManager 가 4개 인스턴스를 shared_ptr 로 소유.
+	 * CollisionMap 은 GameRoomManager 에서 1회 로드한 shared_ptr<const UCollisionMap> 을 주입받는다.
 	 *
 	 * Enter 예외 처리:
 	 *   Enter 는 PlayerID/스폰 좌표/기존 플레이어 목록을 즉시 반환해야 하므로
-	 *   PushJob 으로 비동기화하기 어렵다. 세션 최초 입장은 연결 당 1회뿐이고
-	 *   PlayerID 발급은 atomic 으로 처리되므로, Enter 는 동기 호출을 유지한다.
+	 *   PushJob 으로 비동기화하기 어렵다. 세션 최초 입장은 연결 당 1회뿐이므로
 	 *   Players 맵 접근은 Enter 전용 Mutex(EnterMutex) 로만 보호하며,
 	 *   이후 모든 경로는 JobSerializer 직렬화에 맡긴다.
 	 */
-	class GameRoom : public JobSerializer
+	class GameRoom : public JobSerializer, public std::enable_shared_from_this<GameRoom>
 	{
 	public:
 		struct PlayerEntry
@@ -47,29 +47,35 @@ namespace D1
 			std::weak_ptr<GameServerSession> Session;
 		};
 
-		static std::shared_ptr<GameRoom>& Get();
-
 		/**
-		 * Room 을 초기화한다. 충돌 CSV를 로드해 서버 측 타일 차단 검사에 사용한다.
+		 * 공유 CollisionMap 을 주입하여 Room 을 초기화한다.
 		 *
-		 * @param CollisionCsvPath  Collision CSV 절대/상대 경로 (0=통행, 1=차단)
-		 * @return                  로드 성공 여부. 실패하면 TryMove는 맵 경계만 체크한다.
+		 * @param InCollision  GameRoomManager 가 로드한 공유 CollisionMap. nullptr 허용(맵 경계만 체크).
+		 * @param InRoomID     이 방의 인덱스 [0, GameRoomManager::ROOM_COUNT)
 		 */
-		bool Initialize(const std::string& CollisionCsvPath);
+		void Initialize(std::shared_ptr<const UCollisionMap> InCollision, int32 InRoomID);
+
+		int32 GetRoomID() const { return RoomID; }
+		void SetRoomID(int32 InRoomID) { RoomID = InRoomID; }
 
 		/**
-		 * 플레이어를 Room 에 등록한다. PlayerID/스폰 좌표를 발급하고, 현재 필드의 다른 플레이어 스냅샷을 반환한다.
+		 * GameRoomManager 가 이미 발급한 PlayerID 로 방에 등록한다.
 		 *
 		 * 동기 호출 — 세션 최초 입장은 연결 당 1회이므로 PushJob 비동기화 불필요.
-		 * PlayerID 는 atomic 발급, Players 맵 접근은 EnterMutex 로 보호.
+		 * Players 맵 접근은 EnterMutex 로 보호.
 		 *
-		 * @param Session      입장하는 세션. PlayerID 는 이 함수 호출 후 세션에 저장해야 한다.
+		 * @param PlayerID     GameRoomManager::EnterAnyRoom 에서 발급한 전역 PlayerID
+		 * @param Session      입장하는 세션
 		 * @param OutTileX     발급된 스폰 타일 X
 		 * @param OutTileY     발급된 스폰 타일 Y
 		 * @param OutOthers    자신을 제외한 기존 플레이어 목록
-		 * @return             발급된 PlayerID (>= 1)
 		 */
-		uint64 Enter(const std::shared_ptr<GameServerSession>& Session, int32& OutTileX, int32& OutTileY, std::vector<PlayerEntry>& OutOthers);
+		void EnterWithExistingID(
+			uint64 PlayerID,
+			const std::shared_ptr<GameServerSession>& Session,
+			int32& OutTileX,
+			int32& OutTileY,
+			std::vector<PlayerEntry>& OutOthers);
 
 		/** PlayerID 로 플레이어를 제거한다. PushJob 래핑. */
 		void Leave(uint64 PlayerID);
@@ -80,8 +86,9 @@ namespace D1
 		 *
 		 * @param PlayerID   이동을 요청한 플레이어 ID
 		 * @param Dir        요청된 이동 방향
+		 * @param ClientSeq  클라이언트 측 이동 시퀀스 번호 (S_MOVE/S_MOVE_REJECT echo back 용)
 		 */
-		void TryMove(uint64 PlayerID, Protocol::Direction Dir);
+		void TryMove(uint64 PlayerID, Protocol::Direction Dir, uint64 ClientSeq);
 
 		/**
 		 * 현재 등록된 모든 세션에 SendBuffer 를 전송한다. PushJob 래핑.
@@ -92,27 +99,32 @@ namespace D1
 		 */
 		void Broadcast(SendBufferRef Buffer, uint64 ExceptID = 0);
 
-	private:
-		GameRoom() = default;
+	protected:
+		/**
+		 * JobSerializer 가 GlobalJobQueue 에 등록할 shared_ptr<JobSerializer> 를 반환한다.
+		 * enable_shared_from_this<GameRoom> 으로 자신을 JobSerializer 로 캐스트해 반환한다.
+		 */
+		JobSerializerRef GetSerializerRef() override;
 
+	private:
 		/** Leave 내부 구현 — Job 직렬화 안에서 실행. lock 없음. */
 		void DoLeave(uint64 PlayerID);
 
 		/** TryMove 내부 구현 — Job 직렬화 안에서 실행. lock 없음. */
-		void DoTryMove(uint64 PlayerID, Protocol::Direction Dir);
+		void DoTryMove(uint64 PlayerID, Protocol::Direction Dir, uint64 ClientSeq);
 
 		/** Broadcast 내부 구현 — Job 직렬화 안에서 실행. lock 없음. */
 		void DoBroadcast(SendBufferRef Buffer, uint64 ExceptID);
 
-		/** 다음 발급 PlayerID. 0 은 '미입장'을 의미하므로 1부터 시작. */
-		std::atomic<uint64> NextPlayerID{ 1 };
+		/** 이 방의 인덱스 [0, GameRoomManager::ROOM_COUNT). Initialize 에서 세팅. */
+		int32 RoomID = -1;
 
 		/** Enter 동기 호출 구간의 Players 맵 보호용 뮤텍스. Do* 에서는 사용하지 않는다. */
 		std::mutex EnterMutex;
 		std::unordered_map<uint64, PlayerEntry> Players;
 
-		/** 서버 측 충돌 맵. Initialize 에서 CSV로 1회 로드. */
-		UCollisionMap CollisionMap;
+		/** 서버 측 충돌 맵. GameRoomManager 에서 주입받은 공유 포인터(읽기 전용). */
+		std::shared_ptr<const UCollisionMap> CollisionMap;
 		bool bCollisionLoaded = false;
 
 		/** 스폰 시작 타일. 통행 가능하고 다른 액터와 겹치지 않는 기본 위치. */
