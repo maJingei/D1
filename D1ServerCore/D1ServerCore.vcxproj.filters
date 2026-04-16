@@ -35,7 +35,7 @@
     <ClCompile Include="MemoryPool.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Job\JobSerializer.cpp">
+    <ClCompile Include="Job\JobQueue.cpp">
       <Filter>Job</Filter>
     </ClCompile>
     <ClCompile Include="Job\GlobalJobQueue.cpp">
@@ -73,7 +73,7 @@
     <ClInclude Include="Job\JobQueue.h">
       <Filter>Job</Filter>
     </ClInclude>
-    <ClInclude Include="Job\JobSerializer.h">
+    <ClInclude Include="Job\LockQueue.h">
       <Filter>Job</Filter>
     </ClInclude>
     <ClInclude Include="Job\GlobalJobQueue.h">

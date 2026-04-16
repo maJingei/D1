@@ -37,6 +37,25 @@ extern std::atomic<int32_t> GInflightWorker;
 extern std::atomic<int32_t> GInflightWorkerMax;
 
 // [DIAG] probe: 방별 TryMove 호출 카운터 (A안 4-방 분할 이후 추가)
-// 배열 크기는 GameRoomManager::ROOM_COUNT 와 동일하게 유지할 것.
-static constexpr int DIAG_ROOM_COUNT = 4;
+// 배열 크기는 World::LEVEL_COUNT 와 동일하게 유지할 것.
+static constexpr int DIAG_ROOM_COUNT = 2;
 extern std::atomic<uint64_t> GRoomTryMoveCount[DIAG_ROOM_COUNT];
+
+// LOG LOGIC : 서버 측 패킷 수신/송신 횟수 누계 (server_metrics.csv 의 recv_pps/send_pps 산출용)
+extern std::atomic<uint64_t> GRecvPacketCount;
+extern std::atomic<uint64_t> GSendPacketCount;
+
+// LOG LOGIC : DoBroadcast 1회당 ns 샘플을 적재할 lock-free ring buffer
+// 크기는 2의 거듭제곱이라야 비트 마스크로 인덱스를 얻을 수 있다.
+// 8192 슬롯이면 broadcast 빈도 ≈5k/sec 시 한 초간의 sample 을 모두 보관한다.
+static constexpr uint64_t BROADCAST_NS_RING_SIZE = 8192;
+extern std::atomic<uint64_t> GBroadcastNsRing[BROADCAST_NS_RING_SIZE];
+extern std::atomic<uint64_t> GBroadcastNsRingIdx;
+
+// LOG LOGIC : DoBroadcast 직후 호출되어 ns 측정값을 ring buffer 에 적재한다.
+// fetch_add 로 슬롯을 선점하고 store 로 값을 기록 → lock 없이 다중 스레드 동시 push 가능.
+inline void DiagPushBroadcastNs(uint64_t Ns)
+{
+	const uint64_t Idx = GBroadcastNsRingIdx.fetch_add(1, std::memory_order_relaxed);
+	GBroadcastNsRing[Idx & (BROADCAST_NS_RING_SIZE - 1)].store(Ns, std::memory_order_relaxed);
+}

@@ -115,7 +115,7 @@
       <LanguageStandard>stdcpp17</LanguageStandard>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>$(SolutionDir)Libraries\Include;$(SolutionDir)Common;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)D1ServerCore;$(SolutionDir)Libraries\Include;$(SolutionDir)Common;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -154,7 +154,7 @@
       <LanguageStandard>stdcpp17</LanguageStandard>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>$(SolutionDir)Libraries\Include;$(SolutionDir)Common;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)D1ServerCore;$(SolutionDir)Libraries\Include;$(SolutionDir)Common;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -164,6 +164,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="Core\CoreMinimal.h" />
     <ClInclude Include="Core\DiagCounters.h" />
     <ClInclude Include="Core\Types.h" />
     <ClInclude Include="Core\ContainerTypes.h" />
@@ -186,13 +187,12 @@
     <ClInclude Include="Threading\ThreadManager.h" />
     <ClInclude Include="Threading\ReadWriteLock.h" />
     <ClInclude Include="Job\Job.h" />
+    <ClInclude Include="Job\LockQueue.h" />
     <ClInclude Include="Job\JobQueue.h" />
-    <ClInclude Include="Job\JobSerializer.h" />
     <ClInclude Include="Job\GlobalJobQueue.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Core\DiagCounters.cpp" />
-    <ClCompile Include="D1ServerCore.cpp" />
     <ClCompile Include="$(SolutionDir)Common\Protocol.pb.cc" />
     <ClCompile Include="Iocp\IocpCore.cpp" />
     <ClCompile Include="Iocp\IocpEvent.cpp" />
@@ -208,7 +208,7 @@
     <ClCompile Include="Memory\MemoryPool.cpp" />
     <ClCompile Include="Threading\ThreadManager.cpp" />
     <ClCompile Include="Threading\ReadWriteLock.cpp" />
-    <ClCompile Include="Job\JobSerializer.cpp" />
+    <ClCompile Include="Job\JobQueue.cpp" />
     <ClCompile Include="Job\GlobalJobQueue.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
