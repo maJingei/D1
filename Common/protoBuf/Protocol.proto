@@ -21,18 +21,26 @@ message PlayerInfo {
 	int32  tile_y    = 3;
 }
 
+// 몬스터 스냅샷. S_ENTER_GAME 응답에 현재 Level 의 몬스터 목록으로 내려간다.
+message MonsterInfo {
+	uint64 monster_id = 1;
+	int32  tile_x     = 2;
+	int32  tile_y     = 3;
+}
+
 // Client -> Server: 필드 입장 요청. 현 스코프에서는 Session 기반으로 서버가 PlayerID를 발급하므로 payload는 비워 둔다(향후 확장용).
 message C_ENTER_GAME {
 }
 
-// Server -> Client: 필드 입장 응답. 본인의 PlayerID와 스폰 좌표, 그리고 이미 필드에 들어와 있던 다른 플레이어 목록을 함께 전달한다.
-// room_id 는 A안 4-방 분할 이후 추가된 필드로, 클라이언트는 수신 후 보관만 한다.
+// Server -> Client: 필드 입장 응답. 본인의 PlayerID와 스폰 좌표, 기존 플레이어 목록, 몬스터 목록을 함께 전달한다.
+// room_id 는 배정된 Level 인덱스를 클라이언트에 알려 준다.
 message S_ENTER_GAME {
 	uint64 player_id = 1;
 	int32  tile_x    = 2;
 	int32  tile_y    = 3;
 	repeated PlayerInfo others = 4;
 	uint32 room_id   = 5;
+	repeated MonsterInfo monsters = 6;
 }
 
 // Server -> Client: 신규 플레이어 입장 브로드캐스트. 기존 접속자들에게만 송신한다(본인 제외).
@@ -71,4 +79,36 @@ message S_MOVE_REJECT {
 	int32  tile_x     = 2;
 	int32  tile_y     = 3;
 	uint64 client_seq = 4;
+}
+
+// Server -> Client: 몬스터 스폰. GameRoom 초기화 시 및 신규 플레이어 입장 시 해당 클라에게 송신한다.
+message S_MONSTER_SPAWN {
+	uint64 monster_id = 1;
+	int32  tile_x     = 2;
+	int32  tile_y     = 3;
+}
+
+// Server -> Client: 몬스터 이동 확정 브로드캐스트. 서버가 A*로 결정한 다음 타일로 이동할 때 송신한다.
+message S_MONSTER_MOVE {
+	uint64 monster_id = 1;
+	int32  tile_x     = 2;
+	int32  tile_y     = 3;
+}
+
+// Server -> Client: 몬스터 공격 브로드캐스트. 맨해튼 거리 <= 1 인 순간 송신한다.
+message S_MONSTER_ATTACK {
+	uint64 monster_id = 1;
+	uint64 target_player_id = 2;
+}
+
+// Server -> Client: 플레이어 HP 차감 브로드캐스트. 몬스터 공격 명중 시 송신한다.
+message S_PLAYER_DAMAGED {
+	uint64 player_id  = 1;
+	int32  hp         = 2;
+	int32  max_hp     = 3;
+}
+
+// Server -> Client: 플레이어 사망 브로드캐스트. HP <= 0 이 된 순간 송신한다.
+message S_PLAYER_DIED {
+	uint64 player_id = 1;
 }
