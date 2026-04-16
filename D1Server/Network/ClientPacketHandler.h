@@ -17,6 +17,11 @@ enum : uint16
 	PKT_C_MOVE = 1005,
 	PKT_S_MOVE = 1006,
 	PKT_S_MOVE_REJECT = 1007,
+	PKT_S_MONSTER_SPAWN = 1008,
+	PKT_S_MONSTER_MOVE = 1009,
+	PKT_S_MONSTER_ATTACK = 1010,
+	PKT_S_PLAYER_DAMAGED = 1011,
+	PKT_S_PLAYER_DIED = 1012,
 };
 
 // Custom Handlers
@@ -47,6 +52,11 @@ public:
 	static SendBufferRef MakeSendBuffer(Protocol::S_SPAWN& pkt) { return MakeSendBuffer(pkt, PKT_S_SPAWN); }
 	static SendBufferRef MakeSendBuffer(Protocol::S_MOVE& pkt) { return MakeSendBuffer(pkt, PKT_S_MOVE); }
 	static SendBufferRef MakeSendBuffer(Protocol::S_MOVE_REJECT& pkt) { return MakeSendBuffer(pkt, PKT_S_MOVE_REJECT); }
+	static SendBufferRef MakeSendBuffer(Protocol::S_MONSTER_SPAWN& pkt) { return MakeSendBuffer(pkt, PKT_S_MONSTER_SPAWN); }
+	static SendBufferRef MakeSendBuffer(Protocol::S_MONSTER_MOVE& pkt) { return MakeSendBuffer(pkt, PKT_S_MONSTER_MOVE); }
+	static SendBufferRef MakeSendBuffer(Protocol::S_MONSTER_ATTACK& pkt) { return MakeSendBuffer(pkt, PKT_S_MONSTER_ATTACK); }
+	static SendBufferRef MakeSendBuffer(Protocol::S_PLAYER_DAMAGED& pkt) { return MakeSendBuffer(pkt, PKT_S_PLAYER_DAMAGED); }
+	static SendBufferRef MakeSendBuffer(Protocol::S_PLAYER_DIED& pkt) { return MakeSendBuffer(pkt, PKT_S_PLAYER_DIED); }
 
 private:
 	template<typename PacketType, typename ProcessFunc>

@@ -1,7 +1,6 @@
 #pragma once
 
-#include <atomic>
-#include "Core/Types.h"
+#include "Core/CoreMinimal.h"
 
 /**
  * 부하 벤치마크용 C_MOVE 수신 카운터.
