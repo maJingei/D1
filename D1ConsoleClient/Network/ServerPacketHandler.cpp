@@ -2,11 +2,11 @@
 #include "Game.h"
 #include "World/UWorld.h"
 #include "GameObject/APlayerActor.h"
+#include "GameObject/AMonsterActor.h"
 
 #include <cstdio>
 #include <cwchar>
 
-using namespace D1;
 
 namespace
 {
@@ -37,6 +37,19 @@ namespace
 			auto Player = std::dynamic_pointer_cast<APlayerActor>(Actor);
 			if (Player && Player->GetPlayerID() == PlayerID)
 				return Player;
+		}
+		return nullptr;
+	}
+
+	/** World 내 AMonsterActor 중 지정 MonsterID 를 가진 액터를 찾는다. 없으면 nullptr. */
+	std::shared_ptr<AMonsterActor> FindMonsterActor(UWorld* World, uint64 MonsterID)
+	{
+		if (World == nullptr) return nullptr;
+		for (const std::shared_ptr<AActor>& Actor : World->GetActorsForIteration())
+		{
+			auto Monster = std::dynamic_pointer_cast<AMonsterActor>(Actor);
+			if (Monster && Monster->GetMonsterID() == MonsterID)
+				return Monster;
 		}
 		return nullptr;
 	}
@@ -88,6 +101,14 @@ bool Handle_S_ENTER_GAME(PacketSessionRef& /*session*/, Protocol::S_ENTER_GAME& 
 		World->SpawnActor<APlayerActor>(Info.player_id(), Info.tile_x(), Info.tile_y());
 	}
 
+	// 3. 몬스터 스냅샷 — Level 에 존재하는 몬스터를 한 번에 스폰
+	for (int32 i = 0; i < pkt.monsters_size(); ++i)
+	{
+		const Protocol::MonsterInfo& MI = pkt.monsters(i);
+		World->SpawnActor<AMonsterActor>(MI.monster_id(), MI.tile_x(), MI.tile_y());
+		ScreenLog(L"[Client] S_ENTER_GAME monster id=%llu tile=(%d,%d)", MI.monster_id(), MI.tile_x(), MI.tile_y());
+	}
+
 	return true;
 }
 
@@ -137,5 +158,73 @@ bool Handle_S_MOVE_REJECT(PacketSessionRef& /*session*/, Protocol::S_MOVE_REJECT
 
 	Player->OnServerMoveRejected(pkt.tile_x(), pkt.tile_y());
 	ScreenLog(L"[Client] S_MOVE_REJECT stay=(%d,%d)", pkt.tile_x(), pkt.tile_y());
+	return true;
+}
+
+bool Handle_S_MONSTER_SPAWN(PacketSessionRef& /*session*/, Protocol::S_MONSTER_SPAWN& pkt)
+{
+	// 서버가 스폰한 몬스터를 월드에 생성한다.
+	Game* Instance = Game::GetInstance();
+	if (Instance == nullptr) return false;
+	UWorld* World = Instance->GetWorld();
+	if (World == nullptr) return false;
+
+	World->SpawnActor<AMonsterActor>(pkt.monster_id(), pkt.tile_x(), pkt.tile_y());
+	ScreenLog(L"[Client] S_MONSTER_SPAWN id=%llu tile=(%d,%d)", pkt.monster_id(), pkt.tile_x(), pkt.tile_y());
+	return true;
+}
+
+bool Handle_S_MONSTER_MOVE(PacketSessionRef& /*session*/, Protocol::S_MONSTER_MOVE& pkt)
+{
+	Game* Instance = Game::GetInstance();
+	if (Instance == nullptr) return false;
+	UWorld* World = Instance->GetWorld();
+
+	auto Monster = FindMonsterActor(World, pkt.monster_id());
+	if (Monster == nullptr) return true;
+
+	Monster->OnServerMove(pkt.tile_x(), pkt.tile_y());
+	return true;
+}
+
+bool Handle_S_MONSTER_ATTACK(PacketSessionRef& /*session*/, Protocol::S_MONSTER_ATTACK& pkt)
+{
+	Game* Instance = Game::GetInstance();
+	if (Instance == nullptr) return false;
+	UWorld* World = Instance->GetWorld();
+
+	auto Monster = FindMonsterActor(World, pkt.monster_id());
+	if (Monster == nullptr) return true;
+
+	Monster->OnServerAttack();
+	ScreenLog(L"[Client] S_MONSTER_ATTACK monster=%llu -> player=%llu", pkt.monster_id(), pkt.target_player_id());
+	return true;
+}
+
+bool Handle_S_PLAYER_DAMAGED(PacketSessionRef& /*session*/, Protocol::S_PLAYER_DAMAGED& pkt)
+{
+	Game* Instance = Game::GetInstance();
+	if (Instance == nullptr) return false;
+	UWorld* World = Instance->GetWorld();
+
+	auto Player = FindPlayerActor(World, pkt.player_id());
+	if (Player == nullptr) return true;
+
+	Player->OnServerDamaged(pkt.hp(), pkt.max_hp());
+	ScreenLog(L"[Client] S_PLAYER_DAMAGED id=%llu hp=%d/%d", pkt.player_id(), pkt.hp(), pkt.max_hp());
+	return true;
+}
+
+bool Handle_S_PLAYER_DIED(PacketSessionRef& /*session*/, Protocol::S_PLAYER_DIED& pkt)
+{
+	Game* Instance = Game::GetInstance();
+	if (Instance == nullptr) return false;
+	UWorld* World = Instance->GetWorld();
+
+	auto Player = FindPlayerActor(World, pkt.player_id());
+	if (Player == nullptr) return true;
+
+	Player->OnServerDied();
+	ScreenLog(L"[Client] S_PLAYER_DIED id=%llu", pkt.player_id());
 	return true;
 }

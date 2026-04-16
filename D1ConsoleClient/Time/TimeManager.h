@@ -1,46 +1,43 @@
 #pragma once
 
-#include <Windows.h>
+#include "Core/CoreMinimal.h"
 
-#include "Core/Types.h"
+#include "Core/CoreMinimal.h"
 
-namespace D1
+/**
+ * 프레임 시간 관리 싱글톤.
+ * QueryPerformanceCounter 기반으로 DeltaTime과 FPS를 계산한다.
+ */
+class TimeManager
 {
-	/**
-	 * 프레임 시간 관리 싱글톤.
-	 * QueryPerformanceCounter 기반으로 DeltaTime과 FPS를 계산한다.
-	 */
-	class TimeManager
-	{
-	public:
-		static TimeManager& Get();
+public:
+	static TimeManager& Get();
 
-		/** 타이머를 초기화한다. QueryPerformanceFrequency로 주파수 획득. */
-		void Initialize();
+	/** 타이머를 초기화한다. QueryPerformanceFrequency로 주파수 획득. */
+	void Initialize();
 
-		/** 매 프레임 호출. DeltaTime 계산 및 FPS 갱신. */
-		void Update();
+	/** 매 프레임 호출. DeltaTime 계산 및 FPS 갱신. */
+	void Update();
 
-		/** 타이머를 정리한다. */
-		void Shutdown();
+	/** 타이머를 정리한다. */
+	void Shutdown();
 
-		float GetDeltaTime() const { return DeltaTime; }
-		float GetTotalTime() const { return TotalTime; }
-		float GetFPS() const { return CurrentFPS; }
+	float GetDeltaTime() const { return DeltaTime; }
+	float GetTotalTime() const { return TotalTime; }
+	float GetFPS() const { return CurrentFPS; }
 
-	private:
-		TimeManager() = default;
-		~TimeManager();
-		TimeManager(const TimeManager&) = delete;
-		TimeManager& operator=(const TimeManager&) = delete;
+private:
+	TimeManager() = default;
+	~TimeManager();
+	TimeManager(const TimeManager&) = delete;
+	TimeManager& operator=(const TimeManager&) = delete;
 
-		LARGE_INTEGER Frequency = {};
-		LARGE_INTEGER PrevTime = {};
-		LARGE_INTEGER CurrentTime = {};
-		float DeltaTime = 0.0f;
-		float TotalTime = 0.0f;
-		uint32 FrameCount = 0;
-		float FPSTimer = 0.0f;
-		float CurrentFPS = 0.0f;
-	};
-}
+	LARGE_INTEGER Frequency = {};
+	LARGE_INTEGER PrevTime = {};
+	LARGE_INTEGER CurrentTime = {};
+	float DeltaTime = 0.0f;
+	float TotalTime = 0.0f;
+	uint32 FrameCount = 0;
+	float FPSTimer = 0.0f;
+	float CurrentFPS = 0.0f;
+};

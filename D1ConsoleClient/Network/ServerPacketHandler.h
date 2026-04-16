@@ -17,6 +17,11 @@ enum : uint16
 	PKT_C_MOVE = 1005,
 	PKT_S_MOVE = 1006,
 	PKT_S_MOVE_REJECT = 1007,
+	PKT_S_MONSTER_SPAWN = 1008,
+	PKT_S_MONSTER_MOVE = 1009,
+	PKT_S_MONSTER_ATTACK = 1010,
+	PKT_S_PLAYER_DAMAGED = 1011,
+	PKT_S_PLAYER_DIED = 1012,
 };
 
 // Custom Handlers
@@ -26,6 +31,11 @@ bool Handle_S_ENTER_GAME(PacketSessionRef& session, Protocol::S_ENTER_GAME& pkt)
 bool Handle_S_SPAWN(PacketSessionRef& session, Protocol::S_SPAWN& pkt);
 bool Handle_S_MOVE(PacketSessionRef& session, Protocol::S_MOVE& pkt);
 bool Handle_S_MOVE_REJECT(PacketSessionRef& session, Protocol::S_MOVE_REJECT& pkt);
+bool Handle_S_MONSTER_SPAWN(PacketSessionRef& session, Protocol::S_MONSTER_SPAWN& pkt);
+bool Handle_S_MONSTER_MOVE(PacketSessionRef& session, Protocol::S_MONSTER_MOVE& pkt);
+bool Handle_S_MONSTER_ATTACK(PacketSessionRef& session, Protocol::S_MONSTER_ATTACK& pkt);
+bool Handle_S_PLAYER_DAMAGED(PacketSessionRef& session, Protocol::S_PLAYER_DAMAGED& pkt);
+bool Handle_S_PLAYER_DIED(PacketSessionRef& session, Protocol::S_PLAYER_DIED& pkt);
 
 class ServerPacketHandler
 {
@@ -39,6 +49,11 @@ public:
 		GPacketHandler[PKT_S_SPAWN] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_SPAWN>(Handle_S_SPAWN, session, buffer, len); };
 		GPacketHandler[PKT_S_MOVE] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_MOVE>(Handle_S_MOVE, session, buffer, len); };
 		GPacketHandler[PKT_S_MOVE_REJECT] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_MOVE_REJECT>(Handle_S_MOVE_REJECT, session, buffer, len); };
+		GPacketHandler[PKT_S_MONSTER_SPAWN] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_MONSTER_SPAWN>(Handle_S_MONSTER_SPAWN, session, buffer, len); };
+		GPacketHandler[PKT_S_MONSTER_MOVE] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_MONSTER_MOVE>(Handle_S_MONSTER_MOVE, session, buffer, len); };
+		GPacketHandler[PKT_S_MONSTER_ATTACK] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_MONSTER_ATTACK>(Handle_S_MONSTER_ATTACK, session, buffer, len); };
+		GPacketHandler[PKT_S_PLAYER_DAMAGED] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_PLAYER_DAMAGED>(Handle_S_PLAYER_DAMAGED, session, buffer, len); };
+		GPacketHandler[PKT_S_PLAYER_DIED] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_PLAYER_DIED>(Handle_S_PLAYER_DIED, session, buffer, len); };
 	}
 
 	static bool HandlePacket(PacketSessionRef& session, BYTE* buffer, int32 len)

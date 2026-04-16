@@ -1,8 +1,4 @@
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-
-#include <Windows.h>
+#include "Core/CoreMinimal.h"
 
 #ifdef _DEBUG
 #include <crtdbg.h>
@@ -16,12 +12,11 @@
 #include "Iocp/SendBuffer.h"
 #include "Core/DiagCounters.h"
 #include "Job/GlobalJobQueue.h"
-#include "Job/JobSerializer.h"
+#include "Job/JobQueue.h"
 
 #include <atomic>
 #include <thread>
 
-using namespace D1;
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
@@ -43,10 +38,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		ThreadManager::InitTLS();
 		while (true)
 		{
-			JobSerializerRef Serializer = GlobalJobQueue::GetInstance().Pop(bFlushWorkerRun);
-			if (Serializer == nullptr)
+			JobQueueRef Queue = GlobalJobQueue::GetInstance().Pop(bFlushWorkerRun);
+			if (Queue == nullptr)
 				break;
-			Serializer->FlushJob();
+			Queue->FlushJob();
 		}
 		// Flush Worker 도 자체 TLS SendBufferChunk 를 보유할 수 있으므로 명시적으로 반환한다.
 		SendBufferManager::ShutdownThread();
