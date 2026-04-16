@@ -44,7 +44,7 @@ namespace D1LoadBot
 	 * C_MOVE 전송 시 PendingMoves 에 현재 tick 을 저장하고,
 	 * S_MOVE 응답(자기 것)에서 seq echo-back 방식으로 RTT 를 계산한다.
 	 */
-	class BotSession : public D1::PacketSession
+	class BotSession : public PacketSession
 	{
 	public:
 		BotSession();

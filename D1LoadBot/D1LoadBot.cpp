@@ -29,9 +29,8 @@
 #include "Threading/ThreadManager.h"
 #include "Core/DiagCounters.h"
 #include "Job/GlobalJobQueue.h"
-#include "Job/JobSerializer.h"
+#include "Job/JobQueue.h"
 
-using namespace D1;
 using namespace D1LoadBot;
 
 namespace
@@ -107,14 +106,15 @@ int main()
 	SocketUtils::Init();
 
 	// BotService 생성 — BotSession 팩토리에 이동 주기를 캡처해 전달한다.
-	ClientServiceRef BotClientService = std::make_shared<ClientService>();
 	const uint32 MoveIntervalCaptured = Settings.MoveIntervalMs;
-	BotClientService->SetSessionFactory([MoveIntervalCaptured]() -> SessionRef
-	{
-		auto Bot = std::make_shared<BotSession>();
-		Bot->SetMoveInterval(MoveIntervalCaptured);
-		return Bot;
-	});
+	ClientServiceRef BotClientService = std::make_shared<ClientService>(
+		NetAddress(Settings.ServerHost, Settings.ServerPort),
+		[MoveIntervalCaptured]() -> SessionRef
+		{
+			auto Bot = std::make_shared<BotSession>();
+			Bot->SetMoveInterval(MoveIntervalCaptured);
+			return Bot;
+		});
 
 	if (BotClientService->Start() == false)
 	{
@@ -146,10 +146,10 @@ int main()
 		{
 			while (true)
 			{
-				JobSerializerRef Serializer = GlobalJobQueue::GetInstance().Pop(bFlushWorkerRunning);
-				if (Serializer == nullptr)
+				JobQueueRef Queue = GlobalJobQueue::GetInstance().Pop(bFlushWorkerRunning);
+				if (Queue == nullptr)
 					break;
-				Serializer->FlushJob();
+				Queue->FlushJob();
 			}
 		});
 	}
@@ -157,12 +157,11 @@ int main()
 	ThreadMgr.Launch();
 
 	// 봇 세션 생성 및 연결 요청.
-	NetAddress ServerAddress(Settings.ServerHost, Settings.ServerPort);
 	std::vector<std::shared_ptr<BotSession>> BotSessions;
 	BotSessions.reserve(Settings.SessionCount);
 	for (uint32 i = 0; i < Settings.SessionCount; ++i)
 	{
-		SessionRef Created = BotClientService->Connect(ServerAddress);
+		SessionRef Created = BotClientService->Connect();
 		if (Created == nullptr)
 		{
 			std::printf("[D1LoadBot] Connect failed at index=%u\n", i);

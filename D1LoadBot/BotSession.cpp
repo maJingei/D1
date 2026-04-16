@@ -24,13 +24,13 @@ namespace D1LoadBot
 		 * @return          전송 준비가 완료된 SendBuffer
 		 */
 		template<typename T>
-		D1::SendBufferRef MakeBotSendBuffer(T& Packet, uint16 PacketId)
+		SendBufferRef MakeBotSendBuffer(T& Packet, uint16 PacketId)
 		{
 			const uint16 DataSize = static_cast<uint16>(Packet.ByteSizeLong());
-			const uint16 PacketSize = DataSize + sizeof(D1::PacketHeader);
+			const uint16 PacketSize = DataSize + sizeof(PacketHeader);
 
-			D1::SendBufferRef Buffer = D1::SendBufferManager::Get().Open(PacketSize);
-			D1::PacketHeader* Header = reinterpret_cast<D1::PacketHeader*>(Buffer->Buffer());
+			SendBufferRef Buffer = SendBufferManager::Get().Open(PacketSize);
+			PacketHeader* Header = reinterpret_cast<PacketHeader*>(Buffer->Buffer());
 			Header->Size = PacketSize;
 			Header->Id = PacketId;
 			Packet.SerializeToArray(&Header[1], DataSize);
@@ -64,7 +64,7 @@ namespace D1LoadBot
 	void BotSession::OnConnected()
 	{
 		// 베이스 OnConnected 가 RegisterRecv 를 수행하므로 먼저 호출해 수신 큐를 켠다.
-		D1::Session::OnConnected();
+		Session::OnConnected();
 
 		State.store(EBotState::LoggingIn, std::memory_order_relaxed);
 		SendLogin();
@@ -176,12 +176,12 @@ namespace D1LoadBot
 
 	void BotSession::DispatchPacket(BYTE* Buffer, int32 Len)
 	{
-		if (Len < static_cast<int32>(sizeof(D1::PacketHeader)))
+		if (Len < static_cast<int32>(sizeof(PacketHeader)))
 			return;
 
-		const D1::PacketHeader* Header = reinterpret_cast<const D1::PacketHeader*>(Buffer);
-		const BYTE* Payload = Buffer + sizeof(D1::PacketHeader);
-		const int32 PayloadSize = Len - static_cast<int32>(sizeof(D1::PacketHeader));
+		const PacketHeader* Header = reinterpret_cast<const PacketHeader*>(Buffer);
+		const BYTE* Payload = Buffer + sizeof(PacketHeader);
+		const int32 PayloadSize = Len - static_cast<int32>(sizeof(PacketHeader));
 
 		switch (Header->Id)
 		{
