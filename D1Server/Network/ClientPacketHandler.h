@@ -22,6 +22,9 @@ enum : uint16
 	PKT_S_MONSTER_ATTACK = 1010,
 	PKT_S_PLAYER_DAMAGED = 1011,
 	PKT_S_PLAYER_DIED = 1012,
+	PKT_C_ATTACK = 1013,
+	PKT_S_MONSTER_DAMAGED = 1014,
+	PKT_S_MONSTER_DIED = 1015,
 };
 
 // Custom Handlers
@@ -29,6 +32,7 @@ bool Handle_INVALID(PacketSessionRef& session, BYTE* buffer, int32 len);
 bool Handle_C_LOGIN(PacketSessionRef& session, Protocol::C_LOGIN& pkt);
 bool Handle_C_ENTER_GAME(PacketSessionRef& session, Protocol::C_ENTER_GAME& pkt);
 bool Handle_C_MOVE(PacketSessionRef& session, Protocol::C_MOVE& pkt);
+bool Handle_C_ATTACK(PacketSessionRef& session, Protocol::C_ATTACK& pkt);
 
 class ClientPacketHandler
 {
@@ -40,6 +44,7 @@ public:
 		GPacketHandler[PKT_C_LOGIN] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::C_LOGIN>(Handle_C_LOGIN, session, buffer, len); };
 		GPacketHandler[PKT_C_ENTER_GAME] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::C_ENTER_GAME>(Handle_C_ENTER_GAME, session, buffer, len); };
 		GPacketHandler[PKT_C_MOVE] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::C_MOVE>(Handle_C_MOVE, session, buffer, len); };
+		GPacketHandler[PKT_C_ATTACK] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::C_ATTACK>(Handle_C_ATTACK, session, buffer, len); };
 	}
 
 	static bool HandlePacket(PacketSessionRef& session, BYTE* buffer, int32 len)
@@ -57,6 +62,8 @@ public:
 	static SendBufferRef MakeSendBuffer(Protocol::S_MONSTER_ATTACK& pkt) { return MakeSendBuffer(pkt, PKT_S_MONSTER_ATTACK); }
 	static SendBufferRef MakeSendBuffer(Protocol::S_PLAYER_DAMAGED& pkt) { return MakeSendBuffer(pkt, PKT_S_PLAYER_DAMAGED); }
 	static SendBufferRef MakeSendBuffer(Protocol::S_PLAYER_DIED& pkt) { return MakeSendBuffer(pkt, PKT_S_PLAYER_DIED); }
+	static SendBufferRef MakeSendBuffer(Protocol::S_MONSTER_DAMAGED& pkt) { return MakeSendBuffer(pkt, PKT_S_MONSTER_DAMAGED); }
+	static SendBufferRef MakeSendBuffer(Protocol::S_MONSTER_DIED& pkt) { return MakeSendBuffer(pkt, PKT_S_MONSTER_DIED); }
 
 private:
 	template<typename PacketType, typename ProcessFunc>

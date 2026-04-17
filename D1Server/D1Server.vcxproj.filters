@@ -13,36 +13,87 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="Source Files\GameObject">
+      <UniqueIdentifier>{A1000001-0001-0001-0001-000000000001}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Network">
+      <UniqueIdentifier>{A1000002-0002-0002-0002-000000000002}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\World">
+      <UniqueIdentifier>{A1000003-0003-0003-0003-000000000003}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Common">
+      <UniqueIdentifier>{A1000004-0004-0004-0004-000000000004}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\GameObject">
+      <UniqueIdentifier>{B1000001-0001-0001-0001-000000000001}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\Network">
+      <UniqueIdentifier>{B1000002-0002-0002-0002-000000000002}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\World">
+      <UniqueIdentifier>{B1000003-0003-0003-0003-000000000003}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\Common">
+      <UniqueIdentifier>{B1000004-0004-0004-0004-000000000004}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="D1Server.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="ServerService.cpp">
+    <ClCompile Include="ServerEngine.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="ClientPacketHandler.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="GameObject\AMonsterActor.cpp">
+      <Filter>Source Files\GameObject</Filter>
     </ClCompile>
-    <ClCompile Include="GameServerSession.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="Network\ClientPacketHandler.cpp">
+      <Filter>Source Files\Network</Filter>
     </ClCompile>
-    <ClCompile Include="MetricsCsvWriter.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="Network\GameServerSession.cpp">
+      <Filter>Source Files\Network</Filter>
+    </ClCompile>
+    <ClCompile Include="Network\ServerService.cpp">
+      <Filter>Source Files\Network</Filter>
+    </ClCompile>
+    <ClCompile Include="World\Level.cpp">
+      <Filter>Source Files\World</Filter>
+    </ClCompile>
+    <ClCompile Include="World\World.cpp">
+      <Filter>Source Files\World</Filter>
+    </ClCompile>
+    <ClCompile Include="$(SolutionDir)Common\UCollisionMap.cpp">
+      <Filter>Source Files\Common</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="ServerService.h">
+    <ClInclude Include="ServerEngine.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="ClientPacketHandler.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="GameObject\AActor.h">
+      <Filter>Header Files\GameObject</Filter>
     </ClInclude>
-    <ClInclude Include="GameServerSession.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="GameObject\AMonsterActor.h">
+      <Filter>Header Files\GameObject</Filter>
     </ClInclude>
-    <ClInclude Include="MetricsCsvWriter.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="Network\ClientPacketHandler.h">
+      <Filter>Header Files\Network</Filter>
+    </ClInclude>
+    <ClInclude Include="Network\GameServerSession.h">
+      <Filter>Header Files\Network</Filter>
+    </ClInclude>
+    <ClInclude Include="Network\ServerService.h">
+      <Filter>Header Files\Network</Filter>
+    </ClInclude>
+    <ClInclude Include="World\Level.h">
+      <Filter>Header Files\World</Filter>
+    </ClInclude>
+    <ClInclude Include="World\World.h">
+      <Filter>Header Files\World</Filter>
+    </ClInclude>
+    <ClInclude Include="$(SolutionDir)Common\UCollisionMap.h">
+      <Filter>Header Files\Common</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

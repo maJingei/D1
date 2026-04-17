@@ -3,12 +3,7 @@
 #include "Core/CoreMinimal.h"
 #include "Iocp/PacketSession.h"
 
-/**
- * 서버 측 세션: PacketSession 을 상속하여 OnRecvPacket 을 서버 핸들러 테이블로 디스패치한다.
- *
- * - PlayerID: C_ENTER_GAME 처리 시 World 에서 발급받아 저장한다.
- * - OnDisconnected: Level 에서 플레이어를 제거한다.
- */
+/** 서버 측 세션: PacketSession 을 상속하여 OnRecvPacket 을 서버 핸들러 테이블로 디스패치한다. */
 class GameServerSession : public PacketSession
 {
 public:

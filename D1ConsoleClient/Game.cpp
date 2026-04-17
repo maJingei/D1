@@ -120,6 +120,11 @@ void Game::Run()
 	{
 		const auto FrameStart = std::chrono::steady_clock::now();
 
+		// 반드시 PeekMessage 루프 '이전' 에 호출해야 한다.
+		// PeekMessage 가 OnKeyDown 으로 CurrentKeyStates 를 갱신한 직후 Update 를 호출하면
+		// 새 입력이 즉시 Previous 에도 true 로 복사되어 GetKeyDown 이 영원히 false 가 된다(에지 소실).
+		InputManager::Get().Update();
+
 		MSG Msg = {};
 		while (::PeekMessage(&Msg, nullptr, 0, 0, PM_REMOVE))
 		{
@@ -131,17 +136,14 @@ void Game::Run()
 			::TranslateMessage(&Msg);
 			::DispatchMessage(&Msg);
 		}
-		
+
 		if (!bIsRunning)
 		{
 			break;
 		}
-		
-		// 1. 시간 업데이트 
+
+		// 2. 시간 업데이트
 		TimeManager::Get().Update();
-		
-		// 2. 입력 업데이트
-		InputManager::Get().Update();
 		
 		// ESC 키로 게임 종료
 		if (InputManager::Get().GetKeyDown(EKey::Escape))

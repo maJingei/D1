@@ -5,10 +5,7 @@
 
 class UWorld;
 
-/**
- * 타일맵 탑다운 기준의 4방향 Facing.
- * 이동/공격 등 방향성을 가진 로직에서 공용으로 사용한다.
- */
+/** 타일맵 탑다운 기준의 4방향 Facing. */
 enum class EDirection : uint8
 {
 	Up = 0,
@@ -17,10 +14,7 @@ enum class EDirection : uint8
 	Right,
 };
 
-/**
- * 모든 게임 오브젝트의 최상위 베이스 클래스.
- * UWorld가 관리하는 단위이며, Tick/Render 인터페이스를 제공한다.
- */
+/** 모든 게임 오브젝트의 최상위 베이스 클래스. */
 class AActor
 {
 public:
@@ -42,16 +36,10 @@ public:
 	/** 소속 월드를 반환한다 (월드 외부 생성된 경우 nullptr). */
 	UWorld* GetWorld() const { return World; }
 
-	/**
-	 * 현재 논리 타일 X 좌표. 서브클래스는 자신의 TilePos를 사용하도록 override한다.
-	 * 기본 구현은 픽셀 좌표를 BaseTileSize로 나눈 값을 반환한다.
-	 */
+	/** 현재 논리 타일 X 좌표. */
 	virtual int32 GetTileX() const { return static_cast<int32>(X) / BaseTileSize; }
 
-	/**
-	 * 현재 논리 타일 Y 좌표. 서브클래스는 자신의 TilePos를 사용하도록 override한다.
-	 * 기본 구현은 픽셀 좌표를 BaseTileSize로 나눈 값을 반환한다.
-	 */
+	/** 현재 논리 타일 Y 좌표. */
 	virtual int32 GetTileY() const { return static_cast<int32>(Y) / BaseTileSize; }
 
 	/** true이면 다른 액터가 이 액터가 점유한 타일로 이동할 수 없다. */

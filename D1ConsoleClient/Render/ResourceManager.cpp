@@ -14,6 +14,8 @@ const FTextureEntry ResourceManager::TextureEntries[] =
 	{ L"ArenaTileset",    L"Resource/Arena Tileset.png" },
 	{ L"PlayerSprite",    L"Resource/Adventurer Sprite Sheet v1.6.png" },
 	{ L"MiniGolemSprite", L"Resource/Mini Golem Sprite Sheet.png" },
+	{ L"HitEffect",       L"Resource/Hit.bmp" },
+	{ L"HealthBarSheet",  L"Resource/HealthBar-Sheet.png" },
 };
 const int32 ResourceManager::TextureEntryCount = static_cast<int32>(std::size(TextureEntries));
 
@@ -46,11 +48,10 @@ ResourceManager::~ResourceManager()
 
 void ResourceManager::Initialize()
 {
-	// 1. exe 디렉토리를 기반으로 SolutionDir 를 BaseDir 로 캐싱.
-	//    exe 는 Binary\$(Configuration)\ 에 위치하므로
-	//    2단계 상위("..\..\ ")가 SolutionDir 에 해당한다.
-	//    엔트리 경로는 "Resource/..." 형태를 유지하므로
-	//    BaseDir + "Resource/..." = "$(SolutionDir)Resource/..." 가 된다.
+	// 1. exe 디렉토리를 BaseDir 로 캐싱.
+	//    PostBuildEvent 가 "$(OutDir)Resource" 로 리소스 폴더를 복사하므로
+	//    배포된 환경에서도 exe 옆에 Resource\ 가 함께 존재한다.
+	//    엔트리 경로 "Resource/..." 와 결합하면 exe 기준 절대 경로가 된다.
 	wchar_t ExePath[MAX_PATH] = { 0 };
 	const DWORD Len = ::GetModuleFileNameW(nullptr, ExePath, MAX_PATH);
 	if (Len > 0 && Len < MAX_PATH)
@@ -58,7 +59,7 @@ void ResourceManager::Initialize()
 		std::wstring Path(ExePath);
 		const size_t LastSep = Path.find_last_of(L"\\/");
 		if (LastSep != std::wstring::npos)
-			BaseDir = Path.substr(0, LastSep + 1) + L"..\\..\\" ;
+			BaseDir = Path.substr(0, LastSep + 1);
 	}
 
 	// 2. GDI+ 런타임 초기화 — 이미지 디코딩에 필요.

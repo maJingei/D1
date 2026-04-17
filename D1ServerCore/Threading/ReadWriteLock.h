@@ -2,19 +2,7 @@
 
 #include "Core/CoreMinimal.h"
 
-/**
- * 하이브리드 CAS + WaitOnAddress 기반 ReadWriteLock.
- *
- * 32비트 LockState 하나로 Owner와 Count를 원자적으로 관리한다.
- *   [W:1][ThreadID:15][Count:16]
- *   - W=0: Count = ReadCount (동시 Reader 수)
- *   - W=1: Count = WriteCount (재진입 깊이), ThreadID = 소유자
- *
- * Write 우선 정책: WriteWaiters 카운터로 대기 Writer 존재 시 새 Reader 차단.
- * Write만 재진입을 지원한다.
- *
- * 락 전략: 짧은 스핀(SPIN_COUNT회) -> WaitOnAddress sleep -> WakeByAddressAll wake
- */
+/** 하이브리드 CAS + WaitOnAddress 기반 ReadWriteLock. */
 class ReadWriteLock
 {
 public:

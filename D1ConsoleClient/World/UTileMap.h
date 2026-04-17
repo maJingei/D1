@@ -11,26 +11,14 @@ namespace Gdiplus { class Bitmap; }
 
 class Texture;
 
-/**
- * CSV 타일맵 데이터와 타일셋 Texture를 보유하고 배경으로 렌더링한다.
- * 최초 Render 호출 시 타일들을 캐시 비트맵에 한 번만 합성하고,
- * 이후 호출에서는 캐시된 비트맵을 통째로 출력한다 (고정 화면 가정).
- */
+/** CSV 타일맵 데이터와 타일셋 Texture를 보유하고 배경으로 렌더링한다. */
 class UTileMap
 {
 public:
 	UTileMap();
 	~UTileMap();
 
-	/**
-	 * CSV 타일맵과 타일셋 Texture를 로드한다.
-	 *
-	 * @param CsvPath        타일 인덱스 CSV 파일 경로
-	 * @param TilesetName    ResourceManager에 등록된 타일셋 이름
-	 * @param InTileColumns  타일셋 가로 열 수 (기본 16)
-	 * @param InTileSize     타일 한 칸 크기(px) (기본 32)
-	 * @return               로드 성공 여부
-	 */
+	/** CSV 타일맵과 타일셋 Texture를 로드한다. */
 	bool Load(const std::wstring& CsvPath, const std::wstring& TilesetName, int32 InTileColumns = 16, int32 InTileSize = 32);
 
 	/** 타일맵을 BackDC에 렌더링한다. UWorld::Render에서 Actor 이전에 호출한다. */

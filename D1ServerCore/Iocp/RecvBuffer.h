@@ -3,25 +3,7 @@
 #include <vector>
 #include "Core/CoreMinimal.h"
 
-/**
- * TCP 수신 스트림을 누적하는 커서 기반 버퍼.
- *
- * [0 ... ReadPos ... WritePos ... Capacity]
- *        |-- unread --|-- free --|
- *
- * 사용 패턴:
- *  1) RegisterRecv 직전에 Clean()을 호출하여 여유 공간 확보
- *  2) WSARecv의 WSABUF에 WritePtr()/GetFreeSize() 지정
- *  3) 수신 완료 후 OnWrite(NumOfBytes)로 WritePos 전진
- *  4) 파생 OnRecv에서 ReadPtr() ~ ReadPtr()+GetDataSize() 범위를 파싱
- *  5) 처리 완료 바이트 수만큼 OnRead(Processed)로 ReadPos 전진
- *
- * 공간 재활용 정책:
- *  - ReadPos == WritePos → 둘 다 0으로 리셋 (가장 흔한 경우)
- *  - 잔여 데이터 존재 → 앞으로 memmove하여 뒤쪽 공간 확보
- *
- * 단일 스레드(IOCP 워커)에서 직렬 접근되므로 동기화 없음.
- */
+/** TCP 수신 스트림을 누적하는 커서 기반 버퍼. */
 class RecvBuffer
 {
 public:

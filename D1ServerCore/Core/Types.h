@@ -26,15 +26,7 @@ using SizeType = size_t;
 using PtrInt   = intptr_t;
 using UPtrInt  = uintptr_t;
 
-/**
- * ReadWriteLock 32비트 상태값 비트 레이아웃
- *
- * Bit 31:    W 플래그 (Writer 보유 시 1)
- * Bit 16-30: ThreadID (소유 스레드 ID, 15비트, max 32767)
- * Bit 0-15:  Count (W=0: ReadCount, W=1: WriteCount/재진입)
- *
- * W=1이면 Reader 진입 불가 → RCount는 반드시 0 → 하위 16비트를 WCount로 재활용
- */
+/** ReadWriteLock 32비트 상태값 비트 레이아웃 */
 constexpr uint32 WRITE_FLAG     = 0x80000000;
 constexpr uint32 OWNER_MASK     = 0x7FFF0000;
 constexpr uint32 OWNER_SHIFT    = 16;

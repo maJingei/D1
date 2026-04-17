@@ -5,11 +5,7 @@
 #include <mutex>
 #include <queue>
 
-/**
- * std::queue<T> 의 push / pop / Clear / PopAll 을 mutex 로 래핑한 스레드 안전 큐.
- *
- * JobQueue 와 GlobalJobQueue 의 내부 저장소로 사용된다.
- */
+/** std::queue<T> 의 push / pop / Clear / PopAll 을 mutex 로 래핑한 스레드 안전 큐. */
 template<typename T>
 class LockQueue
 {
@@ -28,12 +24,7 @@ public:
 		Queue.push(std::move(Item));
 	}
 
-	/**
-	 * 큐 맨 앞의 아이템을 꺼낸다.
-	 *
-	 * @param OutItem  꺼낸 아이템을 받을 참조
-	 * @return         큐가 비어있으면 false
-	 */
+	/** 큐 맨 앞의 아이템을 꺼낸다. */
 	bool Pop(T& OutItem)
 	{
 		std::lock_guard<std::mutex> Lock(Mutex);
@@ -52,10 +43,7 @@ public:
 		Queue.swap(Empty);
 	}
 
-	/**
-	 * 큐 전체를 OutQueue 로 스왑한다.
-	 * 락 밖에서 일괄 처리(Flush)할 때 사용한다.
-	 */
+	/** 큐 전체를 OutQueue 로 스왑한다. */
 	void PopAll(std::queue<T>& OutQueue)
 	{
 		std::lock_guard<std::mutex> Lock(Mutex);

@@ -41,13 +41,7 @@ MemoryPool::~MemoryPool()
 
 SizeType MemoryPool::CalculateTotalBlockSize() const
 {
-	/**
-	 * 블록 메모리 레이아웃:
-	 *   Offset 0:            SLIST_ENTRY  (16B) -- lock-free 리스트 노드
-	 *   Offset 16:           SentinelHead (4B) + Padding (12B) = 16B
-	 *   Offset 32:           UserData     (BlockSize bytes)
-	 *   Offset 32+BlockSize: SentinelTail (4B)
-	 */
+	/** 블록 메모리 레이아웃: Offset 0:            SLIST_ENTRY  (16B) -- lock-free 리스트 노드 Offset 16:           SentinelHead (4B) + Padding (12B) = 16B Offset 32:           UserData     (BlockSize bytes) Offset 32+BlockSize: SentinelTail (4B) */
 	SizeType Raw = sizeof(SLIST_ENTRY) + 16 + BlockSize + sizeof(uint32);
 	return (Raw + 15) & ~static_cast<SizeType>(15); // 16바이트 정렬
 }
@@ -104,11 +98,7 @@ void MemoryPool::Deallocate(void* Ptr)
 	MemoryBlock* Block = GetBlockFromUserPtr(Ptr);
 	ValidateSentinels(Block);
 
-	/**
-	 * Double-free 감지: 해제된 블록은 SENTINEL_FREE로 마킹.
-	 * 멀티스레드 한계: A free -> B alloc(리셋) -> A double-free 시 미감지.
-	 * 이는 lock-free pool의 본질적 한계.
-	 */
+	/** Double-free 감지: 해제된 블록은 SENTINEL_FREE로 마킹. */
 	assert(Block->SentinelHead != SENTINEL_FREE && "Double-free detected");
 	Block->SentinelHead = SENTINEL_FREE;
 
@@ -173,15 +163,7 @@ uint32 PoolManager::GetSizeClassIndex(SizeType Size)
 		return 0;
 	}
 
-	/**
-	 * _BitScanReverse64(Size-1)로 O(1) 크기 클래스 인덱스 계산.
-	 * (Size-1)을 사용하여 정확한 2의 거듭제곱일 때 같은 클래스에 매핑.
-	 *
-	 *   Size=9  -> BSR(8)=3  -> 3-2=1 -> SIZE_CLASSES[1]=16
-	 *   Size=16 -> BSR(15)=3 -> 3-2=1 -> SIZE_CLASSES[1]=16
-	 *   Size=17 -> BSR(16)=4 -> 4-2=2 -> SIZE_CLASSES[2]=32
-	 *   Size=65 -> BSR(64)=6 -> 6-2=4 -> SIZE_CLASSES[4]=128
-	 */
+	/** _BitScanReverse64(Size-1)로 O(1) 크기 클래스 인덱스 계산. */
 	unsigned long Index = 0;
 	_BitScanReverse64(&Index, Size - 1);
 

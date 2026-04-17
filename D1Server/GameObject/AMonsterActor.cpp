@@ -8,53 +8,62 @@
 
 void AMonsterActor::ServerTick(int32 DeltaMs)
 {
+	// Phase 1 — Idle: 레벨에 플레이어가 없으면 즉시 종료.
+	if (TickIdle())
+		return;
 
-	// TODO : Tick 단계를 3개로 나누어 함수로 만들 것  
-	// TODO : IDLETICK
+	// Phase 2 — Attack: 타겟 락온 + 쿨다운 감소 + 공격 범위 판정. 공격 범위 안이면 이동 생략.
+	FTileNode TargetTile { -1, -1 };
+	if (TickAttack(DeltaMs, TargetTile))
+		return;
+
+	// Phase 3 — Move: 타겟을 향한 경로 재계산 및 한 칸 이동.
+	TickMove(TargetTile);
+}
+
+bool AMonsterActor::TickIdle()
+{
 	if (GetParentLevel()->IsPlayerEmpty())
 	{
 		State = EMonsterState::Idle;
-		return;
+		return true;
 	}
+	return false;
+}
 
-	// TODO : MOVETICK
-	// 1. 타겟 결정 — 락온된 타겟이 있으면 유지, 없으면 가장 가까운 플레이어로 락온
-	// LockedTargetID 는 OnPlayerLeft 에 의해 플레이어 퇴장 시 0으로 리셋된다.
-	FTileNode TargetTile { -1, -1 };
+bool AMonsterActor::TickAttack(int32 DeltaMs, FTileNode& OutTargetTile)
+{
+	// 1. 타겟 락온 — 기존 락온이 유효하면 유지, 아니면 가장 가까운 플레이어로 새 락온.
+	//    LockedTargetID 는 OnPlayerLeft 에 의해 플레이어 퇴장 시 이미 0 으로 리셋되었을 수 있다.
+	OutTargetTile = { -1, -1 };
 	uint64 TargetID = 0;
-	
 	if (LockedTargetID != 0)
 	{
-		// LockedTargetID에 해당하는 Player가 없을경우 false
-		if (GetParentLevel()->CalculatePlayerTileByID(LockedTargetID, TargetTile) == false)
-		{
-			LockedTargetID = 0;			
-		}
+		// LockedTargetID 플레이어가 사라졌다면 (예: 레벨 전환 사이) 락온 해제만 하고 이번 Tick 은 재선정을 생략.
+		if (GetParentLevel()->CalculatePlayerTileByID(LockedTargetID, OutTargetTile) == false)
+			LockedTargetID = 0;
 	}
 	else
 	{
-		if (GetParentLevel()->FindNearestPlayer(FTileNode{TileX, TileY}, TargetID, TargetTile))
+		if (GetParentLevel()->FindNearestPlayer(FTileNode{TileX, TileY}, TargetID, OutTargetTile))
 		{
 			LockedTargetID = TargetID;
-			
-			// 새로운 플레이어 찾았으니까
+
+			// 새로운 타겟이므로 기존 경로는 무효.
 			CurrentPath.clear();
 			LastKnownTargetTile = { -1, -1 };
 		}
 	}
 
-	const FTileNode MyTile { TileX, TileY };
-	const int32 Dist = ManhattanDistance(MyTile, TargetTile);
-
-	// TODO : ATTACKTICK
-	// 2. 공격/이동 쿨다운 감소
+	// 2. 공격/이동 쿨다운 감소 — 시간 진행은 phase 와 무관하게 매 Tick 적용된다.
 	if (AttackCooldownMs > 0)
 		AttackCooldownMs -= DeltaMs;
-
 	if (MoveCooldownMs > 0)
 		MoveCooldownMs -= DeltaMs;
 
-	// 3. 공격 범위 판정 — 인접하면 이동 중단 후 공격 이벤트 발생
+	// 3. 공격 범위 판정 — 인접하면 이동 중단 후 공격 이벤트 발생.
+	const FTileNode MyTile { TileX, TileY };
+	const int32 Dist = ManhattanDistance(MyTile, OutTargetTile);
 	if (Dist <= AttackRangeTiles)
 	{
 		State = EMonsterState::Attack;
@@ -65,10 +74,16 @@ void AMonsterActor::ServerTick(int32 DeltaMs)
 			AttackCooldownMs = AttackCooldownTotalMs;
 			GetParentLevel()->BroadcastMonsterAttack(MonsterID, LockedTargetID);
 		}
-		return;
+		return true;
 	}
 
-	// 4. 경로 재계산 조건: 타겟이 움직였거나 경로가 비어있음
+	return false;
+}
+
+void AMonsterActor::TickMove(const FTileNode& TargetTile)
+{
+	// 1. 경로 재계산 조건: 타겟이 움직였거나 경로가 비어있음.
+	const FTileNode MyTile { TileX, TileY };
 	const bool bTargetMoved = (TargetTile != LastKnownTargetTile);
 	if (bTargetMoved || CurrentPath.empty())
 	{
@@ -77,20 +92,21 @@ void AMonsterActor::ServerTick(int32 DeltaMs)
 		LastKnownTargetTile = TargetTile;
 	}
 
-	// 5. 경로의 첫 번째 타일로 한 칸 이동 (이동 쿨다운이 끝난 경우에만)
+	// 2. 경로가 비어있으면 Idle 로 전이. (타겟이 무효 좌표이거나 경로 자체가 없음)
 	if (CurrentPath.empty())
 	{
 		State = EMonsterState::Idle;
 		return;
 	}
 
+	// 3. 이동 쿨다운 중이면 Move 상태 유지만 하고 좌표 갱신 없이 다음 Tick 대기.
 	if (MoveCooldownMs > 0)
 	{
-		// 이동 대기 중 — 상태는 Move 유지하지만 좌표 갱신 없이 다음 Tick 대기
 		State = EMonsterState::Move;
 		return;
 	}
 
+	// 4. 경로의 첫 번째 타일로 한 칸 이동 + S_MONSTER_MOVE 브로드캐스트.
 	const FTileNode Next = CurrentPath.front();
 	CurrentPath.erase(CurrentPath.begin());
 	TileX = Next.X;
@@ -98,7 +114,6 @@ void AMonsterActor::ServerTick(int32 DeltaMs)
 	State = EMonsterState::Move;
 	MoveCooldownMs = MoveCooldownTotalMs;
 
-	// 움직였으니 BroadCast 진행
 	GetParentLevel()->BroadcastMonsterMove(MonsterID, TileX, TileY);
 }
 

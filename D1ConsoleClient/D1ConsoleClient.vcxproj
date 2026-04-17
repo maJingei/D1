@@ -127,7 +127,8 @@
       <Command>IF EXIST "$(SolutionDir)Common\protoBuf\Protocol.proto" ("$(SolutionDir)Tools\PacketGenerator\GenPacket.exe" --path "$(SolutionDir)Common\protoBuf\Protocol.proto" --output "$(ProjectDir)Network\ServerPacketHandler" --recv S_ --send C_)</Command>
     </PreBuildEvent>
     <PostBuildEvent>
-      <Command>xcopy /y "$(SolutionDir)Libraries\Libs\ProtoBuf\Debug\libprotobufd.dll" "$(OutDir)"</Command>
+      <Command>xcopy /y "$(SolutionDir)Libraries\Libs\ProtoBuf\Debug\libprotobufd.dll" "$(OutDir)"
+xcopy /s /e /y /i "$(SolutionDir)Resource" "$(OutDir)Resource"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -176,19 +177,24 @@
       <Command>IF EXIST "$(SolutionDir)Common\protoBuf\Protocol.proto" ("$(SolutionDir)Tools\PacketGenerator\GenPacket.exe" --path "$(SolutionDir)Common\protoBuf\Protocol.proto" --output "$(ProjectDir)Network\ServerPacketHandler" --recv S_ --send C_)</Command>
     </PreBuildEvent>
     <PostBuildEvent>
-      <Command>xcopy /y "$(SolutionDir)Libraries\Libs\ProtoBuf\Release\libprotobuf.dll" "$(OutDir)"</Command>
+      <Command>xcopy /y "$(SolutionDir)Libraries\Libs\ProtoBuf\Release\libprotobuf.dll" "$(OutDir)"
+xcopy /s /e /y /i "$(SolutionDir)Resource" "$(OutDir)Resource"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="D1ConsoleClient.cpp" />
     <ClCompile Include="Game.cpp" />
     <ClCompile Include="GameObject\AnimActor.cpp" />
+    <ClCompile Include="GameObject\ACharacterActor.cpp" />
     <ClCompile Include="GameObject\APlayerActor.cpp" />
     <ClCompile Include="GameObject\AMonsterActor.cpp" />
+    <ClCompile Include="GameObject\Effect\AEffectActor.cpp" />
+    <ClCompile Include="GameObject\Effect\AHitEffectActor.cpp" />
     <ClCompile Include="Render\Sprite.cpp" />
     <ClCompile Include="Render\Renderer.cpp" />
     <ClCompile Include="Render\Texture.cpp" />
     <ClCompile Include="Render\ResourceManager.cpp" />
+    <ClCompile Include="UI\UHealthBarWidget.cpp" />
     <ClCompile Include="World\UWorld.cpp" />
     <ClCompile Include="World\UTileMap.cpp" />
     <ClCompile Include="$(SolutionDir)Common\UCollisionMap.cpp" />
@@ -202,12 +208,17 @@
     <ClInclude Include="Game.h" />
     <ClInclude Include="GameObject\AActor.h" />
     <ClInclude Include="GameObject\AnimActor.h" />
+    <ClInclude Include="GameObject\ACharacterActor.h" />
     <ClInclude Include="GameObject\APlayerActor.h" />
     <ClInclude Include="GameObject\AMonsterActor.h" />
+    <ClInclude Include="GameObject\Effect\AEffectActor.h" />
+    <ClInclude Include="GameObject\Effect\AHitEffectActor.h" />
     <ClInclude Include="Render\Sprite.h" />
     <ClInclude Include="Render\Renderer.h" />
     <ClInclude Include="Render\Texture.h" />
     <ClInclude Include="Render\ResourceManager.h" />
+    <ClInclude Include="UI\UWidget.h" />
+    <ClInclude Include="UI\UHealthBarWidget.h" />
     <ClInclude Include="World\UWorld.h" />
     <ClInclude Include="World\UTileMap.h" />
     <ClInclude Include="$(SolutionDir)Common\UCollisionMap.h" />

@@ -16,9 +16,9 @@ echo [1/3] protoc: Protocol.proto -^> Protocol.pb.h / .cc
 if %ERRORLEVEL% NEQ 0 ( echo [ERROR] protoc failed! & popd & exit /b 1 )
 echo [OK]
 
-echo [2/3] GenPacket: C_ -^> D1Server\ClientPacketHandler.h
+echo [2/3] GenPacket: C_ -^> D1Server\Network\ClientPacketHandler.h
 pushd %GEN%
-%GEN_EXE% --path %PROTO_SRC% --output %SOLUTION%\D1Server\ClientPacketHandler --recv C_ --send S_
+%GEN_EXE% --path %PROTO_SRC% --output %SOLUTION%\D1Server\Network\ClientPacketHandler --recv C_ --send S_
 if %ERRORLEVEL% NEQ 0 ( echo [ERROR] Server handler failed! & popd & popd & exit /b 1 )
 popd
 echo [OK]

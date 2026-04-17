@@ -4,10 +4,7 @@
 
 #include "Core/CoreMinimal.h"
 
-/**
- * 프레임 시간 관리 싱글톤.
- * QueryPerformanceCounter 기반으로 DeltaTime과 FPS를 계산한다.
- */
+/** 프레임 시간 관리 싱글톤. */
 class TimeManager
 {
 public:

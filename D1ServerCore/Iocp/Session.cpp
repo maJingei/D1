@@ -2,7 +2,6 @@
 #include "Iocp/Service.h"
 #include "Iocp/SocketUtils.h"
 #include "Iocp/IocpCore.h"
-#include "Core/DiagCounters.h"
 #include "Job/Job.h"
 #include <iostream>
 #include <vector>
@@ -69,8 +68,6 @@ void Session::Send(SendBufferRef InSendBuffer)
 {
 	if (bDisconnected.load(std::memory_order_relaxed) || InSendBuffer == nullptr) return;
 
-	GSendPacketCount.fetch_add(1, std::memory_order_relaxed); // LOG LOGIC : 서버 송신 패킷 1건 (broadcast 시 N명 분량 모두 카운트됨)
-
 	// DoSend 를 Job 으로 래핑하여 SendSerializer 에 Push 한다.
 	// 같은 세션의 Send 순서는 FIFO 로 보장되며, 서로 다른 세션의 Send 는 FlushWorker 풀에 분산 실행된다.
 	SendSerializer->PushJob(std::make_shared<Job>([this, InSendBuffer]()
@@ -92,10 +89,6 @@ void Session::RegisterSend()
 		SendIocpEvent.SendBuffers.push_back(std::move(SendQueue.front()));
 		SendQueue.pop();
 	}
-
-	// [DIAG] probe: WSASend 한 건당 배치 크기
-	GSendBatchSizeSum.fetch_add(static_cast<uint64>(SendIocpEvent.SendBuffers.size()), std::memory_order_relaxed);
-	GSendBatchSizeCount.fetch_add(1, std::memory_order_relaxed);
 
 	// WSABUF 배열 구성 → 한 번의 WSASend 로 Scatter-Gather 전송
 	std::vector<WSABUF> WsaBufs;
@@ -244,14 +237,7 @@ void Session::DoSend(SendBufferRef InSendBuffer)
 	if (bSendRegistered == false)
 	{
 		bSendRegistered = true;
-		// [DIAG] probe: WSASend 트리거 경로
-		GSendRegisterCount.fetch_add(1, std::memory_order_relaxed);
 		RegisterSend();
-	}
-	else
-	{
-		// [DIAG] probe: 이미 WSASend 진행 중 — 큐에 적재만
-		GSendAppendCount.fetch_add(1, std::memory_order_relaxed);
 	}
 }
 
@@ -303,7 +289,6 @@ int32 Session::OnRecv(uint8* Data, int32 NumOfBytes)
 
 void Session::OnSend(int32 NumOfBytes)
 {
-	// std::cout << "[Session] Sent " << NumOfBytes << " bytes" << std::endl;
 }
 
 void Session::OnDisconnected()

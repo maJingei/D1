@@ -4,10 +4,7 @@
 
 #include <cmath>
 
-/**
- * 2D 부동소수점 벡터.
- * 위치, 방향, 오프셋 등 2차원 좌표 연산에 사용한다.
- */
+/** 2D 부동소수점 벡터. */
 struct FVector2D
 {
 	float X = 0.f;

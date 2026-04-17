@@ -7,10 +7,7 @@
 
 namespace Gdiplus { class Bitmap; }
 
-/**
- * GDI+ Bitmap을 보유하는 리소스 단위.
- * ResourceManager가 생성·캐싱하며, 여러 오브젝트가 shared_ptr로 공유한다.
- */
+/** GDI+ Bitmap을 보유하는 리소스 단위. */
 class Texture
 {
 public:

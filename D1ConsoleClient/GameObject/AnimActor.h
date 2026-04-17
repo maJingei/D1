@@ -5,16 +5,7 @@
 
 #include <memory>
 
-/**
- * Sprite 기반 렌더링을 공용화한 액터 베이스.
- * AActor의 최소 인터페이스 위에 "Sprite 소유 / Update / Render" 만을 추가한다.
- * 이동·입력·상태머신 등 파생 클래스별 책임은 여기에 두지 않는다 (최소 범위 원칙).
- *
- * 사용 방법:
- *  - 파생 클래스 생성자에서 ActorSprite = std::make_shared<Sprite>() 후 Init/AddClip/SetClipId.
- *  - 파생 클래스 Tick에서 AnimActor::Tick(DeltaTime) 호출 (또는 본 클래스 Tick을 호출).
- *  - 파생 클래스 Render에서 ActorSprite를 직접 Render하거나 AnimActor::Render를 override.
- */
+/** Sprite 기반 렌더링을 공용화한 액터 베이스. */
 class AnimActor : public AActor
 {
 public:

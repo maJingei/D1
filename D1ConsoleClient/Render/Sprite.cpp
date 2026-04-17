@@ -5,10 +5,26 @@
 
 void Sprite::Init(std::shared_ptr<Texture> InTexture, int32 InFrameSize)
 {
+	// 정사각형 프레임: W/H 를 동일 값으로 위임한다.
+	Init(InTexture, InFrameSize, InFrameSize);
+}
+
+void Sprite::Init(std::shared_ptr<Texture> InTexture, int32 InFrameW, int32 InFrameH)
+{
 	SpriteTexture = InTexture;
-	FrameSize = InFrameSize;
+	FrameW = InFrameW;
+	FrameH = InFrameH;
 	// 기본 출력 크기는 시트 프레임 크기와 동일 (1:1). 확대하려면 SetRenderSize() 호출.
-	RenderSize = InFrameSize;
+	RenderW = InFrameW;
+	RenderH = InFrameH;
+}
+
+void Sprite::SetColorKey(uint8 R, uint8 G, uint8 B)
+{
+	bUseColorKey = true;
+	ColorKeyR = R;
+	ColorKeyG = G;
+	ColorKeyB = B;
 }
 
 void Sprite::AddClip(int32 ClipId, FAnimClip Clip)
@@ -52,6 +68,14 @@ bool Sprite::IsOnLastFrame() const
 	return CurrentFrame == It->second.FrameCount - 1;
 }
 
+int32 Sprite::GetCurrentClipFrameCount() const
+{
+	auto It = Clips.find(CurrentClip);
+	if (It == Clips.end())
+		return 0;
+	return It->second.FrameCount;
+}
+
 void Sprite::Render(HDC BackDC, int32 X, int32 Y, bool bFlipH)
 {
 	if (!SpriteTexture)
@@ -66,8 +90,8 @@ void Sprite::Render(HDC BackDC, int32 X, int32 Y, bool bFlipH)
 		return;
 
 	const FAnimClip& Clip = It->second;
-	int32 SrcX = CurrentFrame * FrameSize;
-	int32 SrcY = Clip.Row * FrameSize;
+	int32 SrcX = CurrentFrame * FrameW;
+	int32 SrcY = Clip.Row * FrameH;
 
 	Gdiplus::Graphics G(BackDC);
 	G.SetPageUnit(Gdiplus::UnitPixel);
@@ -75,17 +99,27 @@ void Sprite::Render(HDC BackDC, int32 X, int32 Y, bool bFlipH)
 	G.SetInterpolationMode(Gdiplus::InterpolationModeNearestNeighbor);
 	G.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
 
+	// 컬러 키 활성 시 ImageAttributes 구성 (배경색 투명 처리).
+	Gdiplus::ImageAttributes Attr;
+	Gdiplus::ImageAttributes* pAttr = nullptr;
+	if (bUseColorKey)
+	{
+		Gdiplus::Color Key(ColorKeyR, ColorKeyG, ColorKeyB);
+		Attr.SetColorKey(Key, Key, Gdiplus::ColorAdjustTypeDefault);
+		pAttr = &Attr;
+	}
+
 	if (!bFlipH)
 	{
-		Gdiplus::Rect DstRect(X, Y, RenderSize, RenderSize);
-		G.DrawImage(Sheet, DstRect, SrcX, SrcY, FrameSize, FrameSize, Gdiplus::UnitPixel);
+		Gdiplus::Rect DstRect(X, Y, RenderW, RenderH);
+		G.DrawImage(Sheet, DstRect, SrcX, SrcY, FrameW, FrameH, Gdiplus::UnitPixel, pAttr);
 	}
 	else
 	{
-		// 좌향: 좌표계를 X+RenderSize로 평행이동 후 X축 -1 스케일 → (X..X+RenderSize) 영역에 거울상으로 그려짐.
-		G.TranslateTransform(static_cast<Gdiplus::REAL>(X + RenderSize), static_cast<Gdiplus::REAL>(Y));
+		// 좌향: 좌표계를 X+RenderW로 평행이동 후 X축 -1 스케일 → (X..X+RenderW) 영역에 거울상으로 그려짐.
+		G.TranslateTransform(static_cast<Gdiplus::REAL>(X + RenderW), static_cast<Gdiplus::REAL>(Y));
 		G.ScaleTransform(-1.0f, 1.0f);
-		Gdiplus::Rect DstRect(0, 0, RenderSize, RenderSize);
-		G.DrawImage(Sheet, DstRect, SrcX, SrcY, FrameSize, FrameSize, Gdiplus::UnitPixel);
+		Gdiplus::Rect DstRect(0, 0, RenderW, RenderH);
+		G.DrawImage(Sheet, DstRect, SrcX, SrcY, FrameW, FrameH, Gdiplus::UnitPixel, pAttr);
 	}
 }

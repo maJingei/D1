@@ -2,12 +2,7 @@
 
 #include "Iocp/PacketSession.h"
 
-/**
- * D1ConsoleClient 전용 Session 파생. PacketSession 을 상속하여 PacketHeader 기반 프레이밍을 사용한다.
- *
- * - OnConnected : 접속 완료 즉시 C_ENTER_GAME 패킷을 자동 송신한다.
- * - OnRecvPacket: 수신한 완전한 패킷 1건을 ServerPacketHandler 테이블로 디스패치한다.
- */
+/** D1ConsoleClient 전용 Session 파생. */
 class GameClientSession : public PacketSession
 {
 protected:

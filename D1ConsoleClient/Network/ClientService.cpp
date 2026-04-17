@@ -1,7 +1,6 @@
 #include "ClientService.h"
 #include "Iocp/Session.h"
 #include "Iocp/SocketUtils.h"
-#include <iostream>
 
 SessionRef ClientService::Connect()
 {
@@ -12,7 +11,6 @@ SessionRef ClientService::Connect()
 	SOCKET Socket = SocketUtils::CreateTcpSocket();
 	if (Socket == INVALID_SOCKET)
 	{
-		std::cout << "[ClientService] CreateTcpSocket failed" << std::endl;
 		ReleaseSession(NewSession);
 		return nullptr;
 	}
@@ -20,9 +18,7 @@ SessionRef ClientService::Connect()
 	NewSession->SetSocket(Socket);
 	GetIocpCore()->Register(NewSession.get());
 	NewSession->RegisterConnect(Address);
-	
-	// Connect 등록 이후의 Tick에서 Iocp Dispatch로 EnterGame 패킷 전송
 
-	std::cout << "[ClientService] Connecting to server..." << std::endl;
+	// Connect 등록 이후의 Tick에서 Iocp Dispatch로 EnterGame 패킷 전송
 	return NewSession;
 }

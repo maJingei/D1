@@ -10,7 +10,6 @@
 #include "Memory/MemoryPool.h"
 #include "Iocp/SocketUtils.h"
 #include "Iocp/SendBuffer.h"
-#include "Core/DiagCounters.h"
 #include "Job/GlobalJobQueue.h"
 #include "Job/JobQueue.h"
 

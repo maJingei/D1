@@ -4,10 +4,7 @@
 
 #include "Core/CoreMinimal.h"
 
-/**
- * 자주 사용하는 키보드 키를 가독성 있게 매핑한 enum.
- * VK_xxx 매크로 대신 EKey::W, EKey::Escape 형태로 사용한다.
- */
+/** 자주 사용하는 키보드 키를 가독성 있게 매핑한 enum. */
 enum class EKey : uint8
 {
 	// 알파벳
@@ -44,10 +41,7 @@ enum class EKey : uint8
 	F9  = VK_F9,  F10 = VK_F10, F11 = VK_F11, F12 = VK_F12,
 };
 
-/**
- * 키보드/마우스 입력 상태를 프레임별로 관리하는 싱글톤.
- * WndProc WM_KEYDOWN/WM_KEYUP 메시지 기반으로 포커스 창에만 입력이 전달된다.
- */
+/** 키보드/마우스 입력 상태를 프레임별로 관리하는 싱글톤. */
 class InputManager
 {
 public:

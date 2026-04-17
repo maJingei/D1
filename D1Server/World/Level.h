@@ -14,25 +14,32 @@ struct PlayerEntry
 	uint64 PlayerID = 0;
 	int32 TileX = 0;
 	int32 TileY = 0;
-	int32 HP = 100;
+
+	/** 현재 HP. 0 이 되면 bIsDead 가 true 로 전이된다. */
+	int32 HP = 20;
+
+	/** 최대 HP. S_PLAYER_DAMAGED 송신 시 함께 내려가서 클라가 게이지 비율 계산에 사용한다. */
+	int32 MaxHP = 20;
+
+	/** 1회 공격 시 대상에게 가하는 데미지. 공격자 책임 원칙 — 서버가 C_ATTACK 처리 시 이 값을 Monster.ApplyDamage 에 전달한다. */
+	int32 AttackDamage = 5;
+
+	/** 마지막 이동 방향. C_ATTACK 처리 시 1칸 앞 타일을 산출하는 데 사용한다. 스폰 직후엔 DIR_DOWN(아래)로 둔다. */
+	Protocol::Direction LastDir = Protocol::DIR_DOWN;
+
+	/** HP=0 이후 true. 추가 입력(이동/공격) 패킷을 모두 무시한다. */
+	bool bIsDead = false;
+
+	/** Client Prediction 모델에서 마지막으로 수락한 C_MOVE. */
+	uint64 LastAcceptedSeq = 0;
+
 	std::weak_ptr<GameServerSession> Session;
 };
 
-/**
- * 서버 월드를 구성하는 단일 레벨.
- *
- * GameRoom 을 대체한다. JobQueue 를 composition 으로 보유하여
- * 모든 상태 변경(Enter/Leave/TryMove/Tick)을 단일 JobQueue 직렬 실행으로 보호한다.
- * EnterMutex 가 제거되어 Enter 도 Job 으로 큐잉되며 응답 패킷은 DoEnter 안에서 전송된다.
- *
- * 라이프사이클: Init → BeginPlay → (Tick 반복) → Destroy
- */
+/** 서버 월드를 구성하는 단일 레벨. */
 class Level : public std::enable_shared_from_this<Level>
 {
 public:
-	/** 플레이어 1인당 최대 HP. */
-	static constexpr int32 PlayerMaxHP = 100;
-	
 	void Init(const std::string& CollisionCsvPath, int32 InLevelID);
 	void BeginPlay();
 	void Destroy();
@@ -43,27 +50,19 @@ public:
 	/** PlayerID 로 플레이어를 제거한다. */
 	void Leave(uint64 PlayerID);
 
-	/**
-	 * 이동 요청을 권위적으로 검증하고 처리한다. Job 큐잉.
-	 *
-	 * @param PlayerID   이동을 요청한 플레이어 ID
-	 * @param Dir        요청된 이동 방향
-	 * @param ClientSeq  클라이언트 측 이동 시퀀스 번호
-	 */
+	/** 이동 요청을 권위적으로 검증하고 처리한다. */
 	void TryMove(uint64 PlayerID, Protocol::Direction Dir, uint64 ClientSeq);
-	
+
+	/** C_ATTACK 수신 시 큐잉. 발신 PlayerID 의 LastDir 을 기준으로 1칸 앞 몬스터를 권위적으로 검색해 데미지를 적용한다. */
+	void TryAttack(uint64 PlayerID);
+
 	bool FindNearestPlayer(FTileNode InNode, OUT uint64& OutTargetID, OUT FTileNode& OutNode);
 	
 	bool CalculatePlayerTileByID(uint64 PlayerID, OUT FTileNode& OutNode);
 	
 	static int32 ManhattanDistance(const FTileNode& A, const FTileNode& B);
 
-	/**
-	 * 현재 등록된 모든 세션에 SendBuffer 를 전송한다. Job 큐잉.
-	 *
-	 * @param Buffer     전송할 SendBuffer
-	 * @param ExceptID   제외할 PlayerID. 0 이면 모두에게 전송.
-	 */
+	/** 현재 등록된 모든 세션에 SendBuffer 를 전송한다. */
 	void Broadcast(SendBufferRef Buffer, uint64 ExceptID = 0);
 
 	/** Engine TimerLoop 에서 호출. TickJob 을 JobQueue 에 push 한다. */
@@ -74,6 +73,9 @@ public:
 	std::weak_ptr<const UCollisionMap> GetCollisionMap() const { return CollisionMap; }
 
 public:
+	/** Init 에서 분리된 충돌 맵 로드. 성공 시 CollisionMap 을 세팅하고 bCollisionLoaded 를 true 로 표시한다. */
+	void LoadCollisionMap(const std::string& CollisionCsvPath);
+
 	/** Enter 내부 구현 — Job 직렬화 안에서 실행. S_ENTER_GAME 응답 + S_SPAWN broadcast. */
 	void DoEnter(uint64 PlayerID, std::shared_ptr<GameServerSession> Session);
 
@@ -82,6 +84,12 @@ public:
 
 	/** TryMove 내부 구현 — Job 직렬화 안에서 실행. */
 	void DoTryMove(uint64 PlayerID, Protocol::Direction Dir, uint64 ClientSeq);
+
+	/** 이동 권위 검증. */
+	bool ValidateMove(const PlayerEntry& Self, int32 NextTileX, int32 NextTileY) const;
+
+	/** TryAttack 내부 구현 — Job 직렬화 안에서 실행. */
+	void DoTryAttack(uint64 PlayerID);
 
 	/** Broadcast 내부 구현 — Job 직렬화 안에서 실행. */
 	void DoBroadcast(SendBufferRef Buffer, uint64 ExceptID);
@@ -95,11 +103,17 @@ public:
 	/** 몬스터 공격 이벤트를 broadcast 하고 대상 플레이어 HP 를 차감한다. */
 	void BroadcastMonsterAttack(uint64 MonsterID, uint64 TargetPlayerID);
 
-	/** 플레이어 피해 결과(HP 갱신)를 broadcast 한다. */
-	void BroadcastPlayerDamaged(uint64 PlayerID, int32 HP);
+	/** 플레이어 피해 결과(HP/MaxHP 갱신)를 broadcast 한다. */
+	void BroadcastPlayerDamaged(uint64 PlayerID, int32 HP, int32 MaxHP);
 
 	/** 플레이어 사망을 broadcast 한다. */
 	void BroadcastPlayerDied(uint64 PlayerID);
+
+	/** 몬스터 피해 결과(HP 갱신)를 broadcast 한다. */
+	void BroadcastMonsterDamaged(uint64 MonsterID, int32 HP, int32 MaxHP);
+
+	/** 몬스터 사망을 broadcast 한다. 클라는 수신 시 해당 몬스터를 월드에서 제거한다. */
+	void BroadcastMonsterDied(uint64 MonsterID);
 
 	/** 이 레벨의 인덱스. Init 에서 세팅. */
 	int32 LevelID = -1;

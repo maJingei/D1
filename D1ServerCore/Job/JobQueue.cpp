@@ -1,6 +1,5 @@
 #include "Job/JobQueue.h"
 #include "Job/GlobalJobQueue.h"
-#include "Core/DiagCounters.h"
 
 void JobQueue::PushJob(JobRef Job)
 {
@@ -18,19 +17,10 @@ void JobQueue::PushJob(JobRef Job)
 
 void JobQueue::FlushJob()
 {
-	// 1. FlushJob 진입 — 동시 실행 중인 Worker 수를 증가시키고 최대값을 갱신한다.
-	const int32 CurrentInflight = GInflightWorker.fetch_add(1, std::memory_order_relaxed) + 1;
-	int32 PrevMax = GInflightWorkerMax.load(std::memory_order_relaxed);
-	while (CurrentInflight > PrevMax)
-	{
-		if (GInflightWorkerMax.compare_exchange_weak(PrevMax, CurrentInflight, std::memory_order_relaxed))
-			break;
-	}
-
-	// 2. Flush 시작 전의 ReserveCount 를 기억해 둔다.
+	// 1. Flush 시작 전의 ReserveCount 를 기억해 둔다.
 	const int32 CountToFlush = ReserveCount.load();
 
-	// 3. PopAll 로 스냅샷을 꺼낸 뒤 락 밖에서 실행한다.
+	// 2. PopAll 로 스냅샷을 꺼낸 뒤 락 밖에서 실행한다.
 	std::queue<JobRef> Snapshot;
 	Queue.PopAll(Snapshot);
 	while (Snapshot.empty() == false)
@@ -39,12 +29,9 @@ void JobQueue::FlushJob()
 		Snapshot.pop();
 	}
 
-	// 4. 처리한 만큼 ReserveCount 를 감소시킨다.
+	// 3. 처리한 만큼 ReserveCount 를 감소시킨다.
 	//    차감 후 남은 값 > 0 이면 Flush 도중 새 Job 이 Push 됐다는 뜻이다.
 	const int32 Remaining = ReserveCount.fetch_sub(CountToFlush) - CountToFlush;
 	if (Remaining > 0)
 		GlobalJobQueue::GetInstance().Push(shared_from_this());
-
-	// 5. FlushJob 이탈 — 동시 실행 중인 Worker 수를 감소시킨다.
-	GInflightWorker.fetch_sub(1, std::memory_order_relaxed);
 }

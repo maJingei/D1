@@ -31,6 +31,9 @@
     <Filter Include="Network">
       <UniqueIdentifier>{B0A1C3D4-E5F6-7806-ABCD-EF1234567806}</UniqueIdentifier>
     </Filter>
+    <Filter Include="UI">
+      <UniqueIdentifier>{B0A1C3D4-E5F6-7807-ABCD-EF1234567807}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="D1ConsoleClient.cpp">
@@ -42,11 +45,23 @@
     <ClCompile Include="GameObject\AnimActor.cpp">
       <Filter>GameObject</Filter>
     </ClCompile>
+    <ClCompile Include="GameObject\ACharacterActor.cpp">
+      <Filter>GameObject</Filter>
+    </ClCompile>
     <ClCompile Include="GameObject\APlayerActor.cpp">
       <Filter>GameObject</Filter>
     </ClCompile>
     <ClCompile Include="GameObject\AMonsterActor.cpp">
       <Filter>GameObject</Filter>
+    </ClCompile>
+    <ClCompile Include="GameObject\AEffectActor.cpp">
+      <Filter>GameObject</Filter>
+    </ClCompile>
+    <ClCompile Include="GameObject\AHitEffectActor.cpp">
+      <Filter>GameObject</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\UHealthBarWidget.cpp">
+      <Filter>UI</Filter>
     </ClCompile>
     <ClCompile Include="World\UWorld.cpp">
       <Filter>World</Filter>
@@ -95,11 +110,26 @@
     <ClInclude Include="GameObject\AnimActor.h">
       <Filter>GameObject</Filter>
     </ClInclude>
+    <ClInclude Include="GameObject\ACharacterActor.h">
+      <Filter>GameObject</Filter>
+    </ClInclude>
     <ClInclude Include="GameObject\APlayerActor.h">
       <Filter>GameObject</Filter>
     </ClInclude>
     <ClInclude Include="GameObject\AMonsterActor.h">
       <Filter>GameObject</Filter>
+    </ClInclude>
+    <ClInclude Include="GameObject\AEffectActor.h">
+      <Filter>GameObject</Filter>
+    </ClInclude>
+    <ClInclude Include="GameObject\AHitEffectActor.h">
+      <Filter>GameObject</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\UWidget.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\UHealthBarWidget.h">
+      <Filter>UI</Filter>
     </ClInclude>
     <ClInclude Include="World\UWorld.h">
       <Filter>World</Filter>

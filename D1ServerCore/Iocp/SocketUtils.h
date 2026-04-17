@@ -5,10 +5,7 @@
 #include <ws2tcpip.h>
 #include "Core/CoreMinimal.h"
 
-/**
- * 소켓 유틸리티 static 클래스.
- * WSAStartup/Cleanup, LPFN 런타임 바인딩, 소켓 생성/옵션/Bind/Listen을 제공한다.
- */
+/** 소켓 유틸리티 static 클래스. */
 class SocketUtils
 {
 public:

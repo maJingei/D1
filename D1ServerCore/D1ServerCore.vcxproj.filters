@@ -13,71 +13,165 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
-  </ItemGroup>
-  <ItemGroup>
-    <Filter Include="Job">
-      <UniqueIdentifier>{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}</UniqueIdentifier>
+    <Filter Include="Source Files\Iocp">
+      <UniqueIdentifier>{C1000001-0001-0001-0001-000000000001}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Job">
+      <UniqueIdentifier>{C1000002-0002-0002-0002-000000000002}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Memory">
+      <UniqueIdentifier>{C1000003-0003-0003-0003-000000000003}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Threading">
+      <UniqueIdentifier>{C1000004-0004-0004-0004-000000000004}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Common">
+      <UniqueIdentifier>{C1000005-0005-0005-0005-000000000005}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\Core">
+      <UniqueIdentifier>{D1000001-0001-0001-0001-000000000001}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\Iocp">
+      <UniqueIdentifier>{D1000002-0002-0002-0002-000000000002}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\Job">
+      <UniqueIdentifier>{D1000003-0003-0003-0003-000000000003}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\Memory">
+      <UniqueIdentifier>{D1000004-0004-0004-0004-000000000004}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\Threading">
+      <UniqueIdentifier>{D1000005-0005-0005-0005-000000000005}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="Core\DiagCounters.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="$(SolutionDir)Common\Protocol.pb.cc">
+      <Filter>Source Files\Common</Filter>
     </ClCompile>
-    <ClCompile Include="D1ServerCore.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="Iocp\IocpCore.cpp">
+      <Filter>Source Files\Iocp</Filter>
     </ClCompile>
-    <ClCompile Include="ThreadManager.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="Iocp\IocpEvent.cpp">
+      <Filter>Source Files\Iocp</Filter>
     </ClCompile>
-    <ClCompile Include="ReadWriteLock.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="Iocp\IocpObject.cpp">
+      <Filter>Source Files\Iocp</Filter>
     </ClCompile>
-    <ClCompile Include="MemoryPool.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="Iocp\Listener.cpp">
+      <Filter>Source Files\Iocp</Filter>
     </ClCompile>
-    <ClCompile Include="Job\JobQueue.cpp">
-      <Filter>Job</Filter>
+    <ClCompile Include="Iocp\NetAddress.cpp">
+      <Filter>Source Files\Iocp</Filter>
+    </ClCompile>
+    <ClCompile Include="Iocp\PacketSession.cpp">
+      <Filter>Source Files\Iocp</Filter>
+    </ClCompile>
+    <ClCompile Include="Iocp\RecvBuffer.cpp">
+      <Filter>Source Files\Iocp</Filter>
+    </ClCompile>
+    <ClCompile Include="Iocp\SendBuffer.cpp">
+      <Filter>Source Files\Iocp</Filter>
+    </ClCompile>
+    <ClCompile Include="Iocp\Service.cpp">
+      <Filter>Source Files\Iocp</Filter>
+    </ClCompile>
+    <ClCompile Include="Iocp\Session.cpp">
+      <Filter>Source Files\Iocp</Filter>
+    </ClCompile>
+    <ClCompile Include="Iocp\SocketUtils.cpp">
+      <Filter>Source Files\Iocp</Filter>
     </ClCompile>
     <ClCompile Include="Job\GlobalJobQueue.cpp">
-      <Filter>Job</Filter>
+      <Filter>Source Files\Job</Filter>
+    </ClCompile>
+    <ClCompile Include="Job\JobQueue.cpp">
+      <Filter>Source Files\Job</Filter>
+    </ClCompile>
+    <ClCompile Include="Memory\MemoryPool.cpp">
+      <Filter>Source Files\Memory</Filter>
+    </ClCompile>
+    <ClCompile Include="Threading\ReadWriteLock.cpp">
+      <Filter>Source Files\Threading</Filter>
+    </ClCompile>
+    <ClCompile Include="Threading\ThreadManager.cpp">
+      <Filter>Source Files\Threading</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Core\DiagCounters.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="Core\ContainerTypes.h">
+      <Filter>Header Files\Core</Filter>
     </ClInclude>
-    <ClInclude Include="Types.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="ThreadManager.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="ReadWriteLock.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="MemoryPool.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Allocator.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="ContainerTypes.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="Core\CoreMinimal.h">
+      <Filter>Header Files\Core</Filter>
     </ClInclude>
     <ClInclude Include="Core\FVector2D.h">
-      <Filter>Header Files</Filter>
+      <Filter>Header Files\Core</Filter>
     </ClInclude>
-    <ClInclude Include="Job\Job.h">
-      <Filter>Job</Filter>
+    <ClInclude Include="Core\Types.h">
+      <Filter>Header Files\Core</Filter>
     </ClInclude>
-    <ClInclude Include="Job\JobQueue.h">
-      <Filter>Job</Filter>
+    <ClInclude Include="Iocp\IocpCore.h">
+      <Filter>Header Files\Iocp</Filter>
     </ClInclude>
-    <ClInclude Include="Job\LockQueue.h">
-      <Filter>Job</Filter>
+    <ClInclude Include="Iocp\IocpEvent.h">
+      <Filter>Header Files\Iocp</Filter>
+    </ClInclude>
+    <ClInclude Include="Iocp\IocpObject.h">
+      <Filter>Header Files\Iocp</Filter>
+    </ClInclude>
+    <ClInclude Include="Iocp\Listener.h">
+      <Filter>Header Files\Iocp</Filter>
+    </ClInclude>
+    <ClInclude Include="Iocp\NetAddress.h">
+      <Filter>Header Files\Iocp</Filter>
+    </ClInclude>
+    <ClInclude Include="Iocp\PacketHeader.h">
+      <Filter>Header Files\Iocp</Filter>
+    </ClInclude>
+    <ClInclude Include="Iocp\PacketSession.h">
+      <Filter>Header Files\Iocp</Filter>
+    </ClInclude>
+    <ClInclude Include="Iocp\RecvBuffer.h">
+      <Filter>Header Files\Iocp</Filter>
+    </ClInclude>
+    <ClInclude Include="Iocp\SendBuffer.h">
+      <Filter>Header Files\Iocp</Filter>
+    </ClInclude>
+    <ClInclude Include="Iocp\Service.h">
+      <Filter>Header Files\Iocp</Filter>
+    </ClInclude>
+    <ClInclude Include="Iocp\Session.h">
+      <Filter>Header Files\Iocp</Filter>
+    </ClInclude>
+    <ClInclude Include="Iocp\SocketUtils.h">
+      <Filter>Header Files\Iocp</Filter>
     </ClInclude>
     <ClInclude Include="Job\GlobalJobQueue.h">
-      <Filter>Job</Filter>
+      <Filter>Header Files\Job</Filter>
+    </ClInclude>
+    <ClInclude Include="Job\Job.h">
+      <Filter>Header Files\Job</Filter>
+    </ClInclude>
+    <ClInclude Include="Job\JobQueue.h">
+      <Filter>Header Files\Job</Filter>
+    </ClInclude>
+    <ClInclude Include="Job\LockQueue.h">
+      <Filter>Header Files\Job</Filter>
+    </ClInclude>
+    <ClInclude Include="Memory\Allocator.h">
+      <Filter>Header Files\Memory</Filter>
+    </ClInclude>
+    <ClInclude Include="Memory\MemoryPool.h">
+      <Filter>Header Files\Memory</Filter>
+    </ClInclude>
+    <ClInclude Include="Memory\ObjectPool.h">
+      <Filter>Header Files\Memory</Filter>
+    </ClInclude>
+    <ClInclude Include="Threading\ReadWriteLock.h">
+      <Filter>Header Files\Threading</Filter>
+    </ClInclude>
+    <ClInclude Include="Threading\ThreadManager.h">
+      <Filter>Header Files\Threading</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

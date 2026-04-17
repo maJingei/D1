@@ -10,10 +10,7 @@
 
 namespace
 {
-	/**
-	 * 화면 좌상단 오버레이로 한 줄을 찍는다. Game 인스턴스가 없으면 no-op.
-	 * Windows subsystem 클라이언트에서는 std::cout 출력이 보이지 않으므로 이 경로가 유일한 UX 로그.
-	 */
+	/** 화면 좌상단 오버레이로 한 줄을 찍는다. */
 	void ScreenLog(const wchar_t* Format, ...)
 	{
 		Game* Instance = Game::GetInstance();
@@ -129,7 +126,7 @@ bool Handle_S_SPAWN(PacketSessionRef& /*session*/, Protocol::S_SPAWN& pkt)
 
 bool Handle_S_MOVE(PacketSessionRef& /*session*/, Protocol::S_MOVE& pkt)
 {
-	// 서버가 확정한 이동. 자기/타인 공통 경로로 해당 액터의 TilePos 를 갱신하고 보간을 시작시킨다.
+	// 서버가 확정한 이동. 본인 예측 seq 와 일치하면 APlayerActor 내부에서 pop 만, 그 외에는 BeginMoveTo.
 	Game* Instance = Game::GetInstance();
 	if (Instance == nullptr) return false;
 	UWorld* World = Instance->GetWorld();
@@ -141,13 +138,13 @@ bool Handle_S_MOVE(PacketSessionRef& /*session*/, Protocol::S_MOVE& pkt)
 		return true;
 	}
 
-	Player->OnServerMoveAccepted(pkt.tile_x(), pkt.tile_y(), pkt.dir());
+	Player->OnServerMoveAccepted(pkt.tile_x(), pkt.tile_y(), pkt.dir(), pkt.client_seq());
 	return true;
 }
 
 bool Handle_S_MOVE_REJECT(PacketSessionRef& /*session*/, Protocol::S_MOVE_REJECT& pkt)
 {
-	// 이동 거절 — 요청자에게만 수신되는 단일 전송. 입력 락 해제 + 현재 위치 동기화.
+	// 이동 거절 — 요청자에게만 수신되는 단일 전송. LastAcceptedSeq 로 스냅샷 clip + 서버 좌표로 롤백 워프.
 	Game* Instance = Game::GetInstance();
 	if (Instance == nullptr) return false;
 	UWorld* World = Instance->GetWorld();
@@ -156,8 +153,9 @@ bool Handle_S_MOVE_REJECT(PacketSessionRef& /*session*/, Protocol::S_MOVE_REJECT
 	if (Player == nullptr)
 		return true;
 
-	Player->OnServerMoveRejected(pkt.tile_x(), pkt.tile_y());
-	ScreenLog(L"[Client] S_MOVE_REJECT stay=(%d,%d)", pkt.tile_x(), pkt.tile_y());
+	Player->OnServerMoveRejected(pkt.last_accepted_seq(), pkt.tile_x(), pkt.tile_y());
+	ScreenLog(L"[Client] S_MOVE_REJECT accepted<=%llu stay=(%d,%d)",
+		pkt.last_accepted_seq(), pkt.tile_x(), pkt.tile_y());
 	return true;
 }
 
@@ -226,5 +224,36 @@ bool Handle_S_PLAYER_DIED(PacketSessionRef& /*session*/, Protocol::S_PLAYER_DIED
 
 	Player->OnServerDied();
 	ScreenLog(L"[Client] S_PLAYER_DIED id=%llu", pkt.player_id());
+	return true;
+}
+
+bool Handle_S_MONSTER_DAMAGED(PacketSessionRef& /*session*/, Protocol::S_MONSTER_DAMAGED& pkt)
+{
+	// 몬스터는 체력바 UI 가 없지만, ACharacterActor::OnServerDamaged 훅을 타야 피격 이펙트가 스폰된다.
+	Game* Instance = Game::GetInstance();
+	if (Instance == nullptr) return false;
+	UWorld* World = Instance->GetWorld();
+
+	auto Monster = FindMonsterActor(World, pkt.monster_id());
+	if (Monster == nullptr) return true;
+
+	Monster->OnServerDamaged(pkt.hp(), pkt.max_hp());
+	ScreenLog(L"[Client] S_MONSTER_DAMAGED id=%llu hp=%d/%d", pkt.monster_id(), pkt.hp(), pkt.max_hp());
+	return true;
+}
+
+bool Handle_S_MONSTER_DIED(PacketSessionRef& /*session*/, Protocol::S_MONSTER_DIED& pkt)
+{
+	// 서버가 권위적으로 사망을 통보 — 월드에서 즉시 제거(증발).
+	Game* Instance = Game::GetInstance();
+	if (Instance == nullptr) return false;
+	UWorld* World = Instance->GetWorld();
+	if (World == nullptr) return false;
+
+	auto Monster = FindMonsterActor(World, pkt.monster_id());
+	if (Monster == nullptr) return true;
+
+	World->DestroyActor(Monster);
+	ScreenLog(L"[Client] S_MONSTER_DIED id=%llu", pkt.monster_id());
 	return true;
 }

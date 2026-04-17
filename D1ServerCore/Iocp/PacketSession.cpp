@@ -1,6 +1,5 @@
 #include "PacketSession.h"
 #include "PacketHeader.h"
-#include "Core/DiagCounters.h" // LOG LOGIC
 
 PacketSessionRef PacketSession::GetPacketSessionRef()
 {
@@ -31,7 +30,6 @@ int32 PacketSession::OnRecv(uint8* Data, int32 NumOfBytes)
 			break;
 
 		// (3)/(4) 완전한 패킷 1건 조립 완료 → 서브클래스에 디스패치
-		GRecvPacketCount.fetch_add(1, std::memory_order_relaxed); // LOG LOGIC : 서버 수신 패킷 1건
 		OnRecvPacket(reinterpret_cast<BYTE*>(&Data[ProcessLen]), static_cast<int32>(Header->Size));
 		ProcessLen += Header->Size;
 	}

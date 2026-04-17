@@ -15,13 +15,7 @@ constexpr SizeType SIZE_CLASSES[] = {
 constexpr uint32 NUM_SIZE_CLASSES = 14;
 constexpr SizeType MAX_POOL_SIZE = 65536;
 
-/**
- * 메모리 블록 레이아웃 (사용자 데이터 16바이트 정렬):
- *
- * [SLIST_ENTRY (16B)][SentinelHead (4B) + Padding (12B) = 16B][UserData (BlockSize)][SentinelTail (4B)][Padding]
- *
- * UserData는 offset 32에서 시작 -> 16바이트 정렬 보장.
- */
+/** 메모리 블록 레이아웃 (사용자 데이터 16바이트 정렬): */
 struct MemoryBlock
 {
 	SLIST_ENTRY SListEntry;     // 16 bytes (offset 0)
@@ -31,30 +25,18 @@ struct MemoryBlock
 	// SentinelTail은 UserData 직후 4바이트
 };
 
-/**
- * VirtualAlloc으로 할당된 메모리 청크.
- * VirtualAlloc 영역의 시작 부분에 직접 배치된다 (별도 new/delete 불필요).
- */
+/** VirtualAlloc으로 할당된 메모리 청크. */
 struct MemoryChunk
 {
 	MemoryChunk* NextChunk;
 	SizeType ChunkSize;
 };
 
-/**
- * 고정 크기 블록을 관리하는 메모리 풀.
- * SLIST 기반 lock-free free-list로 단일 블록 할당/해제.
- * 풀 고갈 시 새 VirtualAlloc 청크로 자동 확장.
- */
+/** 고정 크기 블록을 관리하는 메모리 풀. */
 class MemoryPool
 {
 public:
-	/**
-	 * 메모리 풀을 생성한다.
-	 *
-	 * @param InBlockSize        사용자 데이터 크기 (bytes)
-	 * @param InBlockCount       청크당 초기 블록 수
-	 */
+	/** 메모리 풀을 생성한다. */
 	MemoryPool(SizeType InBlockSize, uint32 InBlockCount);
 	~MemoryPool();
 
@@ -74,11 +56,7 @@ private:
 	/** 새 청크를 VirtualAlloc으로 할당하고 free-list에 등록한다. */
 	void AllocateChunk();
 
-	/**
-	 * 블록 전체 크기 (헤더 + sentinel + padding + 데이터 + sentinel + 패딩, 16B 정렬).
-	 * Raw = sizeof(SLIST_ENTRY) + 16 + BlockSize + sizeof(uint32)
-	 * TotalBlockSize = (Raw + 15) & ~15
-	 */
+	/** 블록 전체 크기 (헤더 + sentinel + padding + 데이터 + sentinel + 패딩, 16B 정렬). */
 	SizeType CalculateTotalBlockSize() const;
 
 	/** 사용자 데이터 포인터에서 MemoryBlock 헤더를 역산한다. */
@@ -108,39 +86,20 @@ private:
 static_assert(alignof(MemoryPool) >= MEMORY_ALLOCATION_ALIGNMENT,
 	"MemoryPool must satisfy SLIST_HEADER alignment requirement");
 
-/**
- * 크기 클래스별 MemoryPool을 관리하는 글로벌 싱글턴.
- * 서버 초기화 시 14개 크기 클래스 풀을 일괄 생성하고,
- * 런타임에는 읽기 전용 O(1) 조회만 수행한다.
- *
- * Leaked singleton 패턴 사용: process exit 시 OS가 메모리 회수.
- * 명시적 Shutdown()으로 리크 보고 및 정리 가능.
- */
+/** 크기 클래스별 MemoryPool을 관리하는 글로벌 싱글턴. */
 class PoolManager
 {
 public:
 	/** Leaked singleton: new로 생성, process exit로 회수. */
 	static PoolManager& GetInstance();
 
-	/**
-	 * 14개 크기 클래스 풀을 일괄 생성한다. 서버 초기화 시 1회 호출.
-	 *
-	 * @param BlockCountPerChunk  크기 클래스당 청크 내 초기 블록 수
-	 */
+	/** 14개 크기 클래스 풀을 일괄 생성한다. */
 	void Initialize(uint32 BlockCountPerChunk);
 
-	/**
-	 * 요청 크기에 맞는 풀을 O(1)로 조회한다.
-	 * _BitScanReverse64로 가장 가까운 상위 2의 거듭제곱 크기 클래스 인덱스를 계산.
-	 *
-	 * @param Size  요청 크기 (bytes). MAX_POOL_SIZE 초과 시 nullptr 반환.
-	 */
+	/** 요청 크기에 맞는 풀을 O(1)로 조회한다. */
 	MemoryPool* GetPool(SizeType Size);
 
-	/**
-	 * 명시적 종료. 리크 보고 + 모든 풀/청크 VirtualFree.
-	 * 서버 종료 시 호출한다.
-	 */
+	/** 명시적 종료. */
 	void Shutdown();
 
 	~PoolManager();

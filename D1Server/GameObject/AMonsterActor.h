@@ -7,12 +7,7 @@ class Level;
 class UCollisionMap;
 class GameRoom;
 
-/**
- * A* 탐색 노드 겸 타일 좌표 구조체.
- *
- * X,Y 는 타일 좌표를 나타내며 float 좌표와 혼동을 방지한다.
- * Cost 는 A* 우선순위 큐에서 사용하는 F 값(= G + H) 이다.
- */
+/** A* 탐색 노드 겸 타일 좌표 구조체. */
 struct FTileNode
 {
 	int32 X = 0;
@@ -25,10 +20,7 @@ struct FTileNode
 	bool operator>(const FTileNode& Other) const { return Cost > Other.Cost; }
 };
 
-/**
- * 몬스터 상태 열거.
- * Tick 안에서 상태 전환을 판별하는 데 사용한다.
- */
+/** 몬스터 상태 열거. */
 enum class EMonsterState : uint8
 {
 	Idle = 0,
@@ -36,60 +28,47 @@ enum class EMonsterState : uint8
 	Attack,
 };
 
-/**
- * 서버 권위 몬스터 액터.
- *
- * GameRoom의 Tick Job 안에서만 상태가 변경되어 경쟁 조건 없이 직렬화된다.
- * A*로 가장 가까운 플레이어를 추적하고, 맨해튼 거리 <= AttackRangeTiles 시 공격 판정을 수행한다.
- * 클라이언트로의 방송(S_MONSTER_MOVE, S_MONSTER_ATTACK 등)은 GameRoom이 담당한다.
- *
- * Non-Goal: 몬스터 HP/사망 처리는 이번 MVP 범위 외이므로 구현하지 않는다.
- */
+/** 서버 권위 몬스터 액터. */
 class AMonsterActor : public AActor
 {
 public:
-	/**
-	 * @param InMonsterID  방 내 고유 몬스터 ID
-	 * @param InTileX      스폰 타일 X
-	 * @param InTileY      스폰 타일 Y
-	 * @param InCollision  이 방의 공유 CollisionMap (읽기 전용)
-	 */
+	
 	AMonsterActor(uint64 InMonsterID, int32 InTileX, int32 InTileY, std::shared_ptr<Level> InLevel)
 		: AActor(InTileX, InTileY), ParentLevel(InLevel), MonsterID(InMonsterID)
-	{}
+	{
+		// 기본 스탯으로 초기화. 추후 종족별 스폰 테이블이 생기면 생성자에 인자로 받아 덮어쓴다.
+		InitHP(DefaultMaxHP);
+	}
 
 	uint64 GetMonsterID() const { return MonsterID; }
 	EMonsterState GetState() const { return State; }
-	static int32 GetAttackDamage() { return AttackDamage; }
+
+	/** 공격자 인스턴스의 데미지 — Level::BroadcastMonsterAttack 이 ApplyDamage 에 전달한다. */
+	int32 GetAttackDamage() const { return AttackDamage; }
+
 	std::shared_ptr<Level> GetParentLevel() const { return ParentLevel.lock(); }
 
-	/**
-	 * 플레이어가 방을 나갔을 때 GameRoom이 호출한다.
-	 * 락온 타겟이 이 플레이어였으면 락온을 해제하여 다음 Tick에 재선택이 일어나게 한다.
-	 */
+	/** 플레이어가 방을 나갔을 때 GameRoom이 호출한다. */
 	void OnPlayerLeft(uint64 PlayerID) { if (LockedTargetID == PlayerID) LockedTargetID = 0; }
 
-	/**
-	 * GameRoom Tick 안에서 호출된다. 추적·이동·공격 판정을 수행한다.
-	 *
-	 * @param OutAttacked   이 Tick에서 공격이 발생했으면 true (S_MONSTER_ATTACK 송신 트리거)
-	 * @param OutTargetID   공격 대상 PlayerID (OutAttacked == true 일 때만 유효)
-	 * @param DeltaMs       Tick 간격(밀리초). 공격 쿨다운 계산에 사용.
-	 */
+	/** Level Tick 안에서 호출된다. */
 	void ServerTick(int32 DeltaMs);
-	
-	/**
-	 * A* 경로탐색. Start → Goal 최단 경로를 OutPath에 기록한다.
-	 * OutPath는 Start 다음 타일부터 Goal까지(또는 Goal 직전까지) 순서대로 담긴다.
-	 *
-	 * @return  경로를 찾았으면 true
-	 */
+
+	/** A* 경로탐색. */
 	bool FindPathAStar(const FTileNode& Start, const FTileNode& Goal, std::vector<FTileNode>& OutPath) const;
 
 	/** 맨해튼 거리 헬퍼 */
 	static int32 ManhattanDistance(const FTileNode& A, const FTileNode& B);
-	
+
 private:
+	/** Phase 1 — Idle: 레벨에 플레이어가 없으면 State 를 Idle 로 전이하고 true 반환. */
+	bool TickIdle();
+
+	/** Phase 2 — Attack: 타겟 락온(유지/재선정) + 공격·이동 쿨다운 감소 + 공격 범위 판정. */
+	bool TickAttack(int32 DeltaMs, FTileNode& OutTargetTile);
+
+	/** Phase 3 — Move: 타겟 타일이 바뀌었거나 경로가 비면 A* 재계산 후, MoveCooldown 이 끝났으면 한 칸 이동 + 브로드캐스트. */
+	void TickMove(const FTileNode& TargetTile);
 	
 	/** 현재 포함되어 있는 Level*/
 	std::weak_ptr<Level> ParentLevel;
@@ -109,11 +88,7 @@ private:
 	/** A* 결과 경로. 다음 목표 타일부터 순서대로 담긴다. */
 	std::vector<FTileNode> CurrentPath;
 
-	/**
-	 * 현재 락온(포커스)된 타겟 PlayerID.
-	 * 0이면 미지정 — 이 경우 가장 가까운 플레이어를 선택하고 락온.
-	 * 락온된 플레이어가 방을 나가면 ServerTick 호출부(GameRoom)에서 0으로 리셋해야 한다.
-	 */
+	/** 현재 락온(포커스)된 타겟 PlayerID. */
 	uint64 LockedTargetID = 0;
 
 	/** 마지막 A* 계산 시 관측한 타겟 플레이어 타일. 바뀌면 재계산. */
@@ -133,7 +108,14 @@ private:
 	std::shared_ptr<const UCollisionMap> CollisionMap;
 
 	// ---------------------------------------------------------------
-	// 튜닝값 (매직 넘버 금지 — 전부 named constant)
+	// 인스턴스 스탯 — 종족별/개체별로 달라질 수 있는 값
+	// ---------------------------------------------------------------
+
+	/** 1회 공격 시 대상에게 가하는 데미지. 인스턴스 멤버 — 공격자 책임 원칙. */
+	int32 AttackDamage = 1;
+
+	// ---------------------------------------------------------------
+	// 튜닝값 (모든 인스턴스 공통 — 매직 넘버 금지, named constant)
 	// ---------------------------------------------------------------
 
 	/** 맨해튼 거리 이 값 이하이면 공격 범위 내로 판정. */
@@ -145,6 +127,6 @@ private:
 	/** 한 칸 이동 후 다음 이동까지 대기 시간(밀리초). */
 	static constexpr int32 MoveCooldownTotalMs = 1000;
 
-	/** 공격 1회 당 플레이어에게 가하는 데미지. */
-	static constexpr int32 AttackDamage = 10;
+	/** 스폰 시 InitHP 가 사용하는 기본 최대 HP. 추후 종족 테이블이 생기면 생성자 인자로 대체. */
+	static constexpr int32 DefaultMaxHP = 10;
 };

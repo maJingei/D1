@@ -13,16 +13,7 @@ class ClientService;
 class Session;
 class UWorld;
 
-/**
- * 게임 클라이언트의 메인 객체.
- * WinMain 이 스택에 1개를 들고 윈도우 생성·게임 루프·서브시스템 수명을 관리한다.
- *
- * 스택 객체로 둔 이유:
- *  - 정적 싱글톤(Game) → 정적 싱글톤(Renderer/ResourceManager 등) 의 destruction 순서가
- *    역순이라, ~Game() 의 Shutdown 안전망이 이미 파괴된 서브시스템에 접근해 크래시한다.
- *  - 스택에 두면 WinMain 종료 시점에 서브시스템들의 정적 dtor 보다 먼저 ~Game() 이 호출돼
- *    안전하게 Shutdown 을 수행할 수 있다.
- */
+/** 게임 클라이언트의 메인 객체. */
 class Game
 {
 public:
@@ -32,12 +23,7 @@ public:
 	Game(const Game&) = delete;
 	Game& operator=(const Game&) = delete;
 
-	/**
-	 * 게임을 초기화한다. 윈도우 생성 및 서브시스템 초기화.
-	 *
-	 * @param hInstance  WinMain에서 받은 인스턴스 핸들
-	 * @return           초기화 성공 여부
-	 */
+	/** 게임을 초기화한다. */
 	bool Initialize(HINSTANCE hInstance);
 
 	/** BeginPlay → 게임 루프(PeekMessage + Tick) → EndPlay */
@@ -104,10 +90,6 @@ private:
 	/** 화면에 동시에 유지할 디버그 로그 최대 줄 수. 초과분은 앞에서 폐기. */
 	static constexpr int32 MaxDebugLogLines = 12;
 
-	/**
-	 * 게임 루프 목표 프레임율. Run() 에서 프레임 말미에 남는 시간만큼 sleep 으로 대기해
-	 * CPU 를 전부 태우는 것을 막는다. 멀티박스 테스트(동일 PC 에서 여러 클라 동시 실행) 시
-	 * 풀-스핀으로 인한 컨텍스트 스위칭 폭주를 억제하는 것이 주 목적이다.
-	 */
+	/** 게임 루프 목표 프레임율. */
 	static constexpr int32 TargetFPS = 60;
 };

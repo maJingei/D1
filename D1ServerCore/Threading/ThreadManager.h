@@ -2,11 +2,7 @@
 
 #include "Core/CoreMinimal.h"
 
-/**
- * 스레드 생성/관리 및 TLS ThreadID를 관리하는 매니저 클래스.
- * 각 스레드는 고유한 ThreadID를 TLS에 보유하며,
- * ReadWriteLock의 Write 재진입 판별에 활용된다.
- */
+/** 스레드 생성/관리 및 TLS ThreadID를 관리하는 매니저 클래스. */
 class ThreadManager
 {
 public:
@@ -26,11 +22,7 @@ public:
 	/** 현재 스레드의 TLS ThreadID를 반환한다. InitTLS 미호출 시 INVALID_THREAD_ID 반환. */
 	static uint32 GetCurrentThreadId();
 
-	/**
-	 * 콜백을 등록한다. Launch() 호출 전에 사용.
-	 *
-	 * @param Callback	스레드에서 실행할 함수
-	 */
+	/** 콜백을 등록한다. */
 	void CreateThread(std::function<void()> Callback);
 
 	/** 등록된 모든 콜백에 대해 스레드를 생성하고 실행한다. */

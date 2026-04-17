@@ -2,14 +2,7 @@
 
 #include "MemoryPool.h"
 
-/**
- * STL 호환 커스텀 할당자.
- * PoolManager를 통해 풀 기반 메모리를 할당/해제한다.
- *
- * n=1: MemoryPool의 SLIST free-list 사용 (lock-free)
- * n>1: 크기 클래스 버킷에서 할당
- * MAX_POOL_SIZE 초과: 직접 VirtualAlloc/VirtualFree
- */
+/** STL 호환 커스텀 할당자. */
 template <typename T>
 class StlAllocator
 {

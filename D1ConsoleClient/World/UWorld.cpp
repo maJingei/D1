@@ -57,8 +57,8 @@ bool UWorld::CanMoveTo(const AActor* Mover, int32 TileX, int32 TileY) const
 		return false;
 
 	// 2. 다른 액터 점유 체크 — 자기 자신은 건너뛰고, bBlocksMovement가 false인 액터는 무시한다.
-	// TODO : Actors 순회 가드 필요(복사를 한다거나). 만약 Actors를 순회하다가 하나의 Actor가 삭제된다면 ? 
-	for (const std::shared_ptr<AActor>& Other : Actors)
+	const std::vector<std::shared_ptr<AActor>> Snapshot = Actors;
+	for (const std::shared_ptr<AActor>& Other : Snapshot)
 	{
 		if (Other.get() == Mover)
 			continue;

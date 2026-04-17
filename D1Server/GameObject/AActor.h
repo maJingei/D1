@@ -2,11 +2,7 @@
 
 #include "Core/CoreMinimal.h"
 
-/**
- * 서버 측 게임 오브젝트의 최상위 베이스 클래스.
- * 클라이언트 AActor와 대칭 구조로 설계되며, 렌더링 없이 논리 상태만 보유한다.
- * Health/ApplyDamage는 이 베이스에 정의하여 모든 액터가 공통으로 사용할 수 있게 한다.
- */
+/** 서버 측 게임 오브젝트의 최상위 베이스 클래스. */
 class AActor
 {
 public:
@@ -32,12 +28,7 @@ public:
 	/** 체력을 초기화한다. 파생 클래스 생성자에서 호출한다. */
 	void InitHP(int32 InMaxHP) { MaxHP = InMaxHP; HP = InMaxHP; }
 
-	/**
-	 * 데미지를 적용한다. 공격자가 데미지 양을 결정하여 전달한다.
-	 *
-	 * @param Damage  적용할 데미지 양 (양수)
-	 * @return        적용 후 남은 HP
-	 */
+	/** 데미지를 적용한다. */
 	int32 ApplyDamage(int32 Damage)
 	{
 		HP -= Damage;

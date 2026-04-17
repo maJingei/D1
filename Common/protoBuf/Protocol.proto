@@ -58,13 +58,15 @@ enum Direction {
 	DIR_RIGHT = 3;
 }
 
-// Client -> Server: 한 칸 이동 요청. 서버 권위적 모델이므로 클라는 이 패킷 송신 후 S_MOVE/S_MOVE_REJECT 수신 전까지 추가 이동 입력을 잠근다.
+// Client -> Server: 한 칸 이동 요청 (Client Prediction 모델).
+// 클라는 이 패킷 송신 전후로 즉시 로컬 예측 이동을 수행한다. 서버는 Direction 만으로 다음 타일을 자체 계산·검증한다.
 message C_MOVE {
 	Direction dir        = 1;
 	uint64    client_seq = 2;
 }
 
-// Server -> Client: 이동 확정 브로드캐스트. GameRoom 내 모든 세션(요청자 포함)에 송신되어 그 시점부터 해당 플레이어가 TargetPos로 보간을 시작한다.
+// Server -> Client: 이동 확정 브로드캐스트. 레벨 내 모든 세션(이동자 포함)에 송신한다.
+// 이동자 본인은 자신이 보낸 client_seq 와 일치하면 이미 예측 이동을 마쳤으므로 스냅샷 큐에서 팝만 수행하고 시각적 반영은 하지 않는다.
 message S_MOVE {
 	uint64    player_id  = 1;
 	int32     tile_x     = 2;
@@ -73,12 +75,14 @@ message S_MOVE {
 	uint64    client_seq = 5;
 }
 
-// Server -> Client: 이동 거절 회신. 충돌·점유 검사 실패 시 요청자에게만 현재 위치를 돌려주어 클라 입력 락을 해제하게 한다.
+// Server -> Client: 이동 거절 회신. 인접 타일/충돌/범위 검증 실패 시 요청자에게만 단일 전송된다.
+// last_accepted_seq 는 서버가 마지막으로 수락한 client_seq 로, 클라는 이를 기준으로 스냅샷 큐를 clip 하고 tile_x/tile_y 로 권위 좌표를 롤백한다.
 message S_MOVE_REJECT {
-	uint64 player_id  = 1;
-	int32  tile_x     = 2;
-	int32  tile_y     = 3;
-	uint64 client_seq = 4;
+	uint64 player_id         = 1;
+	int32  tile_x            = 2;
+	int32  tile_y            = 3;
+	uint64 client_seq        = 4;
+	uint64 last_accepted_seq = 5;
 }
 
 // Server -> Client: 몬스터 스폰. GameRoom 초기화 시 및 신규 플레이어 입장 시 해당 클라에게 송신한다.
@@ -111,4 +115,21 @@ message S_PLAYER_DAMAGED {
 // Server -> Client: 플레이어 사망 브로드캐스트. HP <= 0 이 된 순간 송신한다.
 message S_PLAYER_DIED {
 	uint64 player_id = 1;
+}
+
+// Client -> Server: 공격 요청. 페이로드 없음 — 서버가 발신 PlayerID + 서버 측 LastDir 로 1칸 앞 타일을 산출하여 권위적으로 처리한다.
+message C_ATTACK {
+	uint64 client_seq = 1;
+}
+
+// Server -> Client: 몬스터 HP 차감 브로드캐스트. 플레이어 공격 명중 시 송신한다.
+message S_MONSTER_DAMAGED {
+	uint64 monster_id = 1;
+	int32  hp         = 2;
+	int32  max_hp     = 3;
+}
+
+// Server -> Client: 몬스터 사망 브로드캐스트. HP <= 0 이 된 순간 송신하며 클라는 해당 몬스터를 월드에서 제거한다.
+message S_MONSTER_DIED {
+	uint64 monster_id = 1;
 }
