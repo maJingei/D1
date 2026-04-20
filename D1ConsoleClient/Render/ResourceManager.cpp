@@ -1,6 +1,7 @@
 #include "ResourceManager.h"
 #include "Texture.h"
 #include "UCollisionMap.h"
+#include "LevelConfig.h"
 
 #include <gdiplus.h>
 
@@ -11,25 +12,29 @@
 
 const FTextureEntry ResourceManager::TextureEntries[] =
 {
-	{ L"ArenaTileset",    L"Resource/Arena Tileset.png" },
-	{ L"PlayerSprite",    L"Resource/Adventurer Sprite Sheet v1.6.png" },
+	{ L"ArenaTileset", L"Resource/Arena Tileset.png" },
+	{ L"PlayerSprite", L"Resource/Adventurer Sprite Sheet v1.6.png" },
+	{ L"PlayerFemaleSprite", L"Resource/Adventurer Female Sprite Sheet.png" },
+	{ L"PlayerDwarfSprite", L"Resource/Gladiator-Sprite Sheet.png" },
 	{ L"MiniGolemSprite", L"Resource/Mini Golem Sprite Sheet.png" },
-	{ L"HitEffect",       L"Resource/Hit.bmp" },
-	{ L"HealthBarSheet",  L"Resource/HealthBar-Sheet.png" },
+	{ L"HitEffect", L"Resource/Hit.bmp" },
+	{ L"HealthBarSheet", L"Resource/HealthBar-Sheet.png" },
 };
 const int32 ResourceManager::TextureEntryCount = static_cast<int32>(std::size(TextureEntries));
 
 // 렌더링 순서: Ground → Water -> Wall
+// CsvPath 는 Level 폴더 내부 상대 경로. 최종 경로는 ResolveLevelPath(LevelID, ...) 로 조합.
 const FTileLayerEntry ResourceManager::TileLayerEntries[] =
 {
-	{ L"Resource/test_Render_Ground.csv", L"ArenaTileset" },
-	{ L"Resource/test_Render_Water.csv",  L"ArenaTileset" },
-	{ L"Resource/test_Render_Wall.csv",   L"ArenaTileset" },
+	{ L"test_Render_Ground.csv", L"ArenaTileset" },
+	{ L"test_Render_Water.csv",  L"ArenaTileset" },
+	{ L"test_Render_Wall.csv",   L"ArenaTileset" },
 };
 const int32 ResourceManager::TileLayerEntryCount = static_cast<int32>(std::size(TileLayerEntries));
 
 // 충돌 전용 CSV (0=통행, 1=차단). 렌더 레이어와 독립적으로 1회 로드.
-const wchar_t* const ResourceManager::CollisionMapPath = L"Resource/Collision_Collision.csv";
+// Level 폴더 내부 상대 경로. ResolveLevelPath(LevelID, ...) 로 최종 경로 조합.
+const wchar_t* const ResourceManager::CollisionMapPath = L"Collision_Collision.csv";
 
 /*-----------------------------------------------------------------*/
 
@@ -85,6 +90,25 @@ std::wstring ResourceManager::ResolvePath(const std::wstring& RelativePath) cons
 	return BaseDir + RelativePath;
 }
 
+std::wstring ResourceManager::ResolveLevelPath(int32 LevelID, const std::wstring& LevelRelativePath) const
+{
+	// Level 폴더 내부 상대 경로를 Resource/{LevelFolders[LevelID]}/ 아래 절대 경로로 변환.
+	// LevelID 범위 방어: 벗어나면 Level0 으로 폴백.
+	const int32 SafeID = (LevelID >= 0 && LevelID < AVAILABLE_LEVEL_COUNT) ? LevelID : 0;
+	const char* Folder = LevelFolders[SafeID];
+
+	// ASCII 폴더명을 wchar_t 로 변환 (Level01 같은 ASCII 전용이므로 단순 복사로 충분).
+	std::wstring WideFolder;
+	for (const char* P = Folder; *P != '\0'; ++P)
+		WideFolder.push_back(static_cast<wchar_t>(*P));
+
+	std::wstring Combined = L"Resource/";
+	Combined += WideFolder;
+	Combined += L'/';
+	Combined += LevelRelativePath;
+	return ResolvePath(Combined);
+}
+
 std::shared_ptr<Texture> ResourceManager::Load(const std::wstring& Name, const std::wstring& Path)
 {
 	// 이미 등록된 이름이면 캐시에서 반환
@@ -109,10 +133,10 @@ std::shared_ptr<Texture> ResourceManager::GetTexture(const std::wstring& Name)
 	return nullptr;
 }
 
-std::shared_ptr<UCollisionMap> ResourceManager::LoadCollisionMap()
+std::shared_ptr<UCollisionMap> ResourceManager::LoadCollisionMap(int32 LevelID)
 {
 	auto Map = std::make_shared<UCollisionMap>();
-	if (!Map->Load(ResolvePath(CollisionMapPath)))
+	if (!Map->Load(ResolveLevelPath(LevelID, CollisionMapPath)))
 		return nullptr;
 	return Map;
 }

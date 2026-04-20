@@ -2,14 +2,11 @@
 #include "Iocp/Service.h"
 #include "Iocp/SocketUtils.h"
 #include "Iocp/IocpCore.h"
-#include "Job/Job.h"
 #include <iostream>
 #include <vector>
 
-Session::Session() : SendSerializer(std::make_shared<JobQueue>())
+Session::Session()
 {
-	// SendSerializer 는 세션 생성 즉시 make_shared 로 초기화.
-	// 세션 수명 내내 동일한 shared_ptr<JobQueue> 를 유지한다.
 }
 
 Session::~Session()
@@ -68,12 +65,15 @@ void Session::Send(SendBufferRef InSendBuffer)
 {
 	if (bDisconnected.load(std::memory_order_relaxed) || InSendBuffer == nullptr) return;
 
-	// DoSend 를 Job 으로 래핑하여 SendSerializer 에 Push 한다.
-	// 같은 세션의 Send 순서는 FIFO 로 보장되며, 서로 다른 세션의 Send 는 FlushWorker 풀에 분산 실행된다.
-	SendSerializer->PushJob(std::make_shared<Job>([this, InSendBuffer]()
+	// SendQueue.push + bSendRegistered CAS + RegisterSend 호출까지 하나의 임계 구역으로 묶는다.
+	// 여러 스레드(IOCP 워커, Flush 워커)에서 동시 진입해도 WSASend 가 중복 발사되지 않는다.
+	std::lock_guard<std::mutex> Guard(SendLock);
+	SendQueue.push(std::move(InSendBuffer));
+	if (bSendRegistered == false)
 	{
-		DoSend(InSendBuffer);
-	}));
+		bSendRegistered = true;
+		RegisterSend();
+	}
 }
 
 void Session::RegisterSend()
@@ -83,7 +83,7 @@ void Session::RegisterSend()
 	HoldForIo(SendIocpEvent);
 
 	// 현재 큐의 모든 SendBuffer 를 꺼내 SendEvent 가 보관한다.
-	// SendSerializer 직렬화 안에서만 호출되므로 락 불필요.
+	// 호출자가 SendLock 을 잡고 있으므로 SendQueue 경쟁 없음.
 	while (SendQueue.empty() == false)
 	{
 		SendIocpEvent.SendBuffers.push_back(std::move(SendQueue.front()));
@@ -219,34 +219,11 @@ void Session::ProcessSend(int32 NumOfBytes)
 		return;
 	}
 
-	// DoProcessSend 를 Job 으로 래핑해 SendSerializer 에 Push.
-	// DoSend 와 같은 직렬화 파이프라인에서 실행되어 SendQueue/bSendRegistered 경쟁 없음.
-	SendSerializer->PushJob(std::make_shared<Job>([this, NumOfBytes]()
-	{
-		DoProcessSend(NumOfBytes);
-	}));
-}
-
-/*-----------------------------------------------------------------*/
-/*  Send 직렬화 내부 메서드 (FlushJob 컨텍스트 전용)               */
-/*-----------------------------------------------------------------*/
-
-void Session::DoSend(SendBufferRef InSendBuffer)
-{
-	SendQueue.push(std::move(InSendBuffer));
-	if (bSendRegistered == false)
-	{
-		bSendRegistered = true;
-		RegisterSend();
-	}
-}
-
-void Session::DoProcessSend(int32 NumOfBytes)
-{
+	// Send 와 동일한 임계 구역에서 SendQueue/bSendRegistered 상태 전이를 수행한다.
+	// 전송 중에 새로 쌓인 SendBuffer 가 있으면 다시 RegisterSend, 없으면 bSendRegistered 를 내려
+	// 다음 Send 호출이 트리거를 걸 수 있게 한다.
+	std::lock_guard<std::mutex> Guard(SendLock);
 	OnSend(NumOfBytes);
-
-	// 전송 중에 새로 쌓인 SendBuffer 가 있으면 다시 RegisterSend,
-	// 없으면 bSendRegistered 를 내려 다음 DoSend 가 트리거를 걸 수 있게 한다.
 	if (SendQueue.empty())
 	{
 		bSendRegistered = false;

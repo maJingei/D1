@@ -39,8 +39,3 @@ void AMonsterActor::OnServerMove(int32 InTileX, int32 InTileY)
 
 	BeginMoveTo(InTileX, InTileY);
 }
-
-void AMonsterActor::OnServerAttack()
-{
-	BeginAttack();
-}

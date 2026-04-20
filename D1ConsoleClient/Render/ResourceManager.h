@@ -45,6 +45,9 @@ public:
 	/** 실행 파일 기준 상대 경로를 절대 경로로 변환한다. */
 	std::wstring ResolvePath(const std::wstring& RelativePath) const;
 
+	/** 지정 LevelID 의 Level 폴더(Resource/LevelFolders[LevelID]/) 내부 상대 경로를 절대 경로로 변환한다. */
+	std::wstring ResolveLevelPath(int32 LevelID, const std::wstring& LevelRelativePath) const;
+
 	/** GDI+ 를 초기화한다. Game::Initialize() 에서 호출한다. */
 	void Initialize();
 
@@ -57,8 +60,8 @@ public:
 	/** Load() 로 등록한 이름으로 Texture 를 조회한다. */
 	std::shared_ptr<Texture> GetTexture(const std::wstring& Name);
 
-	/** 충돌 맵 CSV(CollisionMapPath)를 로드하여 UCollisionMap 인스턴스를 생성한다. */
-	std::shared_ptr<UCollisionMap> LoadCollisionMap();
+	/** 지정 LevelID 의 충돌 맵 CSV 를 로드하여 UCollisionMap 인스턴스를 생성한다. */
+	std::shared_ptr<UCollisionMap> LoadCollisionMap(int32 LevelID);
 
 private:
 	ResourceManager() = default;

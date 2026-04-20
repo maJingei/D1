@@ -14,11 +14,19 @@ message S_LOGIN {
 	uint64 user_id = 2;
 }
 
+// 플레이어 코스메틱 캐릭터 종류. 스탯/행동 동일, 스프라이트만 다름. 서버가 입장 시 자동 배정한다.
+enum CharacterType {
+	CT_DEFAULT = 0;
+	CT_FEMALE  = 1;
+	CT_DWARF   = 2;
+}
+
 // 필드의 다른 플레이어 스냅샷. S_ENTER_GAME 응답에 기존 접속자 목록으로 내려간다.
 message PlayerInfo {
 	uint64 player_id = 1;
 	int32  tile_x    = 2;
 	int32  tile_y    = 3;
+	CharacterType character_type = 4;
 }
 
 // 몬스터 스냅샷. S_ENTER_GAME 응답에 현재 Level 의 몬스터 목록으로 내려간다.
@@ -41,6 +49,8 @@ message S_ENTER_GAME {
 	repeated PlayerInfo others = 4;
 	uint32 room_id   = 5;
 	repeated MonsterInfo monsters = 6;
+	float  move_speed = 7;
+	CharacterType character_type = 8;
 }
 
 // Server -> Client: 신규 플레이어 입장 브로드캐스트. 기존 접속자들에게만 송신한다(본인 제외).
@@ -48,6 +58,7 @@ message S_SPAWN {
 	uint64 player_id = 1;
 	int32  tile_x    = 2;
 	int32  tile_y    = 3;
+	CharacterType character_type = 4;
 }
 
 // 타일 이동 4방향. 대각 이동 없음.
@@ -132,4 +143,23 @@ message S_MONSTER_DAMAGED {
 // Server -> Client: 몬스터 사망 브로드캐스트. HP <= 0 이 된 순간 송신하며 클라는 해당 몬스터를 월드에서 제거한다.
 message S_MONSTER_DIED {
 	uint64 monster_id = 1;
+}
+
+// Server -> Client: 포탈을 통한 Level 전이. 클라는 수신 시 로컬 월드 상태를 비우고 new_level_id 기준으로 재초기화한 뒤 후속 S_ENTER_GAME 을 대기한다.
+// 본인에게만 단일 전송 — 전환 대상 세션 외 다른 플레이어들에게는 S_PLAYER_LEFT / S_SPAWN 브로드캐스트로 가시성을 조정한다.
+message S_PORTAL_TELEPORT {
+	uint32 new_level_id = 1;
+	int32  spawn_tile_x = 2;
+	int32  spawn_tile_y = 3;
+}
+
+// Server -> Client: 같은 Level 에서 플레이어가 퇴장(또는 Portal 로 다른 Level 로 이동)한 사실을 남은 세션들에게 알린다.
+message S_PLAYER_LEFT {
+	uint64 player_id = 1;
+}
+
+// Server -> Client: 플레이어 공격 액션 브로드캐스트. C_ATTACK 수신 시 공격자 본인 제외 같은 Level 의 다른 세션에 송신한다.
+// 방향은 수신 클라에서 해당 APlayerActor 의 현재 Facing 을 사용하여 애니메이션만 재생한다.
+message S_PLAYER_ATTACK {
+	uint64 player_id = 1;
 }

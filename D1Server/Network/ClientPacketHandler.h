@@ -25,6 +25,9 @@ enum : uint16
 	PKT_C_ATTACK = 1013,
 	PKT_S_MONSTER_DAMAGED = 1014,
 	PKT_S_MONSTER_DIED = 1015,
+	PKT_S_PORTAL_TELEPORT = 1016,
+	PKT_S_PLAYER_LEFT = 1017,
+	PKT_S_PLAYER_ATTACK = 1018,
 };
 
 // Custom Handlers
@@ -64,6 +67,9 @@ public:
 	static SendBufferRef MakeSendBuffer(Protocol::S_PLAYER_DIED& pkt) { return MakeSendBuffer(pkt, PKT_S_PLAYER_DIED); }
 	static SendBufferRef MakeSendBuffer(Protocol::S_MONSTER_DAMAGED& pkt) { return MakeSendBuffer(pkt, PKT_S_MONSTER_DAMAGED); }
 	static SendBufferRef MakeSendBuffer(Protocol::S_MONSTER_DIED& pkt) { return MakeSendBuffer(pkt, PKT_S_MONSTER_DIED); }
+	static SendBufferRef MakeSendBuffer(Protocol::S_PORTAL_TELEPORT& pkt) { return MakeSendBuffer(pkt, PKT_S_PORTAL_TELEPORT); }
+	static SendBufferRef MakeSendBuffer(Protocol::S_PLAYER_LEFT& pkt) { return MakeSendBuffer(pkt, PKT_S_PLAYER_LEFT); }
+	static SendBufferRef MakeSendBuffer(Protocol::S_PLAYER_ATTACK& pkt) { return MakeSendBuffer(pkt, PKT_S_PLAYER_ATTACK); }
 
 private:
 	template<typename PacketType, typename ProcessFunc>

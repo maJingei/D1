@@ -258,20 +258,23 @@ void Game::LoadResources()
 		ResourceManager::Get().Load(Entry.Name, Entry.Path);
 	}
 
-	// TileLayerEntries 순회 — 레이어 순서대로 월드에 등록.
-	// CSV 경로는 exe 디렉토리 기준 상대 경로라서 ResolvePath 로 절대 경로로 변환한 뒤 UTileMap 에 넘긴다.
-	for (int32 i = 0; i < ResourceManager::TileLayerEntryCount; i++)
+	// 모든 Level 의 타일 레이어/충돌 맵을 프리로드 — 포탈 전이 시 디스크 재로드 없이 CurrentLevelID 스위칭만으로 교체된다.
+	for (int32 LevelID = 0; LevelID < LEVEL_COUNT; LevelID++)
 	{
-		const FTileLayerEntry& Entry = ResourceManager::TileLayerEntries[i];
-		auto TileMap = std::make_unique<UTileMap>();
-		if (TileMap->Load(ResourceManager::Get().ResolvePath(Entry.CsvPath), Entry.TilesetName))
+		// TileLayerEntries 순회 — 레이어 순서대로 해당 LevelID 슬롯에 등록.
+		for (int32 i = 0; i < ResourceManager::TileLayerEntryCount; i++)
 		{
-			World->AddTileLayer(std::move(TileMap));
+			const FTileLayerEntry& Entry = ResourceManager::TileLayerEntries[i];
+			auto TileMap = std::make_unique<UTileMap>();
+			if (TileMap->Load(ResourceManager::Get().ResolveLevelPath(LevelID, Entry.CsvPath), Entry.TilesetName))
+			{
+				World->AddTileLayer(LevelID, std::move(TileMap));
+			}
 		}
-	}
 
-	// 충돌 맵 로드: 렌더 레이어와 분리된 단일 논리 레이어
-	World->SetCollisionMap(ResourceManager::Get().LoadCollisionMap());
+		// 충돌 맵 로드: 렌더 레이어와 분리된 단일 논리 레이어
+		World->SetCollisionMap(LevelID, ResourceManager::Get().LoadCollisionMap(LevelID));
+	}
 }
 
 bool Game::CreateGameWindow()

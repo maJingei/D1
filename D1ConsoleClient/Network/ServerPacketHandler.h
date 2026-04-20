@@ -25,6 +25,9 @@ enum : uint16
 	PKT_C_ATTACK = 1013,
 	PKT_S_MONSTER_DAMAGED = 1014,
 	PKT_S_MONSTER_DIED = 1015,
+	PKT_S_PORTAL_TELEPORT = 1016,
+	PKT_S_PLAYER_LEFT = 1017,
+	PKT_S_PLAYER_ATTACK = 1018,
 };
 
 // Custom Handlers
@@ -41,6 +44,9 @@ bool Handle_S_PLAYER_DAMAGED(PacketSessionRef& session, Protocol::S_PLAYER_DAMAG
 bool Handle_S_PLAYER_DIED(PacketSessionRef& session, Protocol::S_PLAYER_DIED& pkt);
 bool Handle_S_MONSTER_DAMAGED(PacketSessionRef& session, Protocol::S_MONSTER_DAMAGED& pkt);
 bool Handle_S_MONSTER_DIED(PacketSessionRef& session, Protocol::S_MONSTER_DIED& pkt);
+bool Handle_S_PORTAL_TELEPORT(PacketSessionRef& session, Protocol::S_PORTAL_TELEPORT& pkt);
+bool Handle_S_PLAYER_LEFT(PacketSessionRef& session, Protocol::S_PLAYER_LEFT& pkt);
+bool Handle_S_PLAYER_ATTACK(PacketSessionRef& session, Protocol::S_PLAYER_ATTACK& pkt);
 
 class ServerPacketHandler
 {
@@ -61,6 +67,9 @@ public:
 		GPacketHandler[PKT_S_PLAYER_DIED] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_PLAYER_DIED>(Handle_S_PLAYER_DIED, session, buffer, len); };
 		GPacketHandler[PKT_S_MONSTER_DAMAGED] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_MONSTER_DAMAGED>(Handle_S_MONSTER_DAMAGED, session, buffer, len); };
 		GPacketHandler[PKT_S_MONSTER_DIED] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_MONSTER_DIED>(Handle_S_MONSTER_DIED, session, buffer, len); };
+		GPacketHandler[PKT_S_PORTAL_TELEPORT] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_PORTAL_TELEPORT>(Handle_S_PORTAL_TELEPORT, session, buffer, len); };
+		GPacketHandler[PKT_S_PLAYER_LEFT] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_PLAYER_LEFT>(Handle_S_PLAYER_LEFT, session, buffer, len); };
+		GPacketHandler[PKT_S_PLAYER_ATTACK] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_PLAYER_ATTACK>(Handle_S_PLAYER_ATTACK, session, buffer, len); };
 	}
 
 	static bool HandlePacket(PacketSessionRef& session, BYTE* buffer, int32 len)

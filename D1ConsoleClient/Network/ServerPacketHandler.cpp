@@ -2,6 +2,8 @@
 #include "Game.h"
 #include "World/UWorld.h"
 #include "GameObject/APlayerActor.h"
+#include "GameObject/APlayerFemaleActor.h"
+#include "GameObject/APlayerDwarfActor.h"
 #include "GameObject/AMonsterActor.h"
 
 #include <cstdio>
@@ -25,30 +27,34 @@ namespace
 		Instance->AddDebugLog(Buffer);
 	}
 
-	/** World 내 APlayerActor 중 지정 PlayerID 를 가진 액터를 찾는다. 없으면 nullptr. */
+	/** World 내 APlayerActor 중 지정 PlayerID 를 가진 액터를 찾는다. 없으면 nullptr. UWorld 의 ID 맵으로 위임 — O(1) 조회. */
 	std::shared_ptr<APlayerActor> FindPlayerActor(UWorld* World, uint64 PlayerID)
 	{
 		if (World == nullptr) return nullptr;
-		for (const std::shared_ptr<AActor>& Actor : World->GetActorsForIteration())
-		{
-			auto Player = std::dynamic_pointer_cast<APlayerActor>(Actor);
-			if (Player && Player->GetPlayerID() == PlayerID)
-				return Player;
-		}
-		return nullptr;
+		return World->FindPlayerActor(PlayerID);
 	}
 
-	/** World 내 AMonsterActor 중 지정 MonsterID 를 가진 액터를 찾는다. 없으면 nullptr. */
+	/** World 내 AMonsterActor 중 지정 MonsterID 를 가진 액터를 찾는다. 없으면 nullptr. UWorld 의 ID 맵으로 위임 — O(1) 조회. */
 	std::shared_ptr<AMonsterActor> FindMonsterActor(UWorld* World, uint64 MonsterID)
 	{
 		if (World == nullptr) return nullptr;
-		for (const std::shared_ptr<AActor>& Actor : World->GetActorsForIteration())
+		return World->FindMonsterActor(MonsterID);
+	}
+
+	/**
+	 * CharacterType 에 따라 적절한 APlayerActor 파생 클래스를 스폰한다. 반환은 공통 베이스 포인터.
+	 * S_ENTER_GAME(본인/기존 접속자) / S_SPAWN 공용으로 사용되어 캐릭터 타입 분기 코드 중복을 방지한다.
+	 */
+	std::shared_ptr<APlayerActor> SpawnPlayerByType(UWorld* World, uint64 PlayerID, int32 TileX, int32 TileY, Protocol::CharacterType Type)
+	{
+		if (World == nullptr) return nullptr;
+		switch (Type)
 		{
-			auto Monster = std::dynamic_pointer_cast<AMonsterActor>(Actor);
-			if (Monster && Monster->GetMonsterID() == MonsterID)
-				return Monster;
+		case Protocol::CT_FEMALE: return World->SpawnActor<APlayerFemaleActor>(PlayerID, TileX, TileY);
+		case Protocol::CT_DWARF:  return World->SpawnActor<APlayerDwarfActor>(PlayerID, TileX, TileY);
+		case Protocol::CT_DEFAULT:
+		default:                  return World->SpawnActor<APlayerActor>(PlayerID, TileX, TileY);
 		}
-		return nullptr;
 	}
 }
 
@@ -86,16 +92,24 @@ bool Handle_S_ENTER_GAME(PacketSessionRef& /*session*/, Protocol::S_ENTER_GAME& 
 	const int32 MyTileX = pkt.tile_x();
 	const int32 MyTileY = pkt.tile_y();
 	Instance->SetMyPlayerID(MyPlayerID);
-	World->SpawnActor<APlayerActor>(MyPlayerID, MyTileX, MyTileY);
+	// 서버가 배정한 Level 로 렌더/충돌 기준을 전환. 초기 진입과 포탈 후속 S_ENTER_GAME 양쪽을 커버한다.
+	World->SetCurrentLevelID(static_cast<int32>(pkt.room_id()));
+	
+	// 서버가 이 세션에 배정한 CharacterType 로 파생 Actor 스폰 — 타입별 스프라이트 시트 자동 적용.
+	std::shared_ptr<APlayerActor> MyPlayer = SpawnPlayerByType(World, MyPlayerID, MyTileX, MyTileY, pkt.character_type());
+	// 서버 기준 TileMoveSpeed 를 본인 액터에 주입 — 로컬 입력 쿨다운이 서버와 동일해지도록.
+	if (MyPlayer != nullptr)
+		MyPlayer->SetTileMoveSpeed(pkt.move_speed());
 
-	ScreenLog(L"[Client] S_ENTER_GAME myId=%llu tile=(%d,%d) others=%d",
-		MyPlayerID, MyTileX, MyTileY, pkt.others_size());
+	ScreenLog(L"[Client] S_ENTER_GAME myId=%llu tile=(%d,%d) others=%d speed=%.2f type=%d",
+		MyPlayerID, MyTileX, MyTileY, pkt.others_size(), pkt.move_speed(), static_cast<int>(pkt.character_type()));
 
-	// 2. 기존 접속자 스냅샷 — 신규 입장 시점에 이미 필드에 있던 플레이어들을 스폰
+	// 2. 기존 접속자 스냅샷 — 신규 입장 시점에 이미 필드에 있던 플레이어들을 스폰.
+	//    각 PlayerInfo 의 character_type 을 그대로 사용해 타인도 올바른 스프라이트로 보인다.
 	for (int32 i = 0; i < pkt.others_size(); ++i)
 	{
 		const Protocol::PlayerInfo& Info = pkt.others(i);
-		World->SpawnActor<APlayerActor>(Info.player_id(), Info.tile_x(), Info.tile_y());
+		SpawnPlayerByType(World, Info.player_id(), Info.tile_x(), Info.tile_y(), Info.character_type());
 	}
 
 	// 3. 몬스터 스냅샷 — Level 에 존재하는 몬스터를 한 번에 스폰
@@ -117,10 +131,9 @@ bool Handle_S_SPAWN(PacketSessionRef& /*session*/, Protocol::S_SPAWN& pkt)
 	UWorld* World = Instance->GetWorld();
 	if (World == nullptr) return false;
 
-	ScreenLog(L"[Client] S_SPAWN id=%llu tile=(%d,%d)",
-		pkt.player_id(), pkt.tile_x(), pkt.tile_y());
+	ScreenLog(L"[Client] S_SPAWN id=%llu tile=(%d,%d) type=%d",	pkt.player_id(), pkt.tile_x(), pkt.tile_y(), static_cast<int>(pkt.character_type()));
 
-	World->SpawnActor<APlayerActor>(pkt.player_id(), pkt.tile_x(), pkt.tile_y());
+	SpawnPlayerByType(World, pkt.player_id(), pkt.tile_x(), pkt.tile_y(), pkt.character_type());
 	return true;
 }
 
@@ -153,9 +166,9 @@ bool Handle_S_MOVE_REJECT(PacketSessionRef& /*session*/, Protocol::S_MOVE_REJECT
 	if (Player == nullptr)
 		return true;
 
-	Player->OnServerMoveRejected(pkt.last_accepted_seq(), pkt.tile_x(), pkt.tile_y());
-	ScreenLog(L"[Client] S_MOVE_REJECT accepted<=%llu stay=(%d,%d)",
-		pkt.last_accepted_seq(), pkt.tile_x(), pkt.tile_y());
+	Player->OnServerMoveRejected(pkt.client_seq(), pkt.last_accepted_seq(), pkt.tile_x(), pkt.tile_y());
+	ScreenLog(L"[Client] S_MOVE_REJECT rejected=%llu accepted<=%llu stay=(%d,%d)",
+		pkt.client_seq(), pkt.last_accepted_seq(), pkt.tile_x(), pkt.tile_y());
 	return true;
 }
 
@@ -215,14 +228,17 @@ bool Handle_S_PLAYER_DAMAGED(PacketSessionRef& /*session*/, Protocol::S_PLAYER_D
 
 bool Handle_S_PLAYER_DIED(PacketSessionRef& /*session*/, Protocol::S_PLAYER_DIED& pkt)
 {
+	// 사망 = 월드 액터 제거(본인/타인 동일). 본인은 관전 뷰 전환, 타 클라는 죽은 캐릭터가 증발.
+	// 서버의 Players 맵에는 세션이 남아있어 이후에도 몬스터/플레이어 이동 패킷을 계속 수신한다.
 	Game* Instance = Game::GetInstance();
 	if (Instance == nullptr) return false;
 	UWorld* World = Instance->GetWorld();
+	if (World == nullptr) return false;
 
 	auto Player = FindPlayerActor(World, pkt.player_id());
 	if (Player == nullptr) return true;
 
-	Player->OnServerDied();
+	World->DestroyActor(Player);
 	ScreenLog(L"[Client] S_PLAYER_DIED id=%llu", pkt.player_id());
 	return true;
 }
@@ -255,5 +271,62 @@ bool Handle_S_MONSTER_DIED(PacketSessionRef& /*session*/, Protocol::S_MONSTER_DI
 
 	World->DestroyActor(Monster);
 	ScreenLog(L"[Client] S_MONSTER_DIED id=%llu", pkt.monster_id());
+	return true;
+}
+
+bool Handle_S_PORTAL_TELEPORT(PacketSessionRef& /*session*/, Protocol::S_PORTAL_TELEPORT& pkt)
+{
+	// 서버가 Portal 을 통해 다른 Level 로 전이시켰음을 통보. 현재 월드의 Actor 들을 모두 제거하고
+	// 후속 S_ENTER_GAME 을 대기한다. S_ENTER_GAME 이 본인/기존 플레이어/몬스터를 재스폰한다.
+	Game* Instance = Game::GetInstance();
+	if (Instance == nullptr) return false;
+	UWorld* World = Instance->GetWorld();
+	if (World == nullptr) return false;
+
+	// 맵 이동 후 스냅샷 모두 정리
+	if (auto MyPlayer = FindPlayerActor(World, Instance->GetMyPlayerID()))
+		MyPlayer->ClearSnapshotQueue();
+
+	// DestroyActor 는 Actors 벡터를 수정하므로 순회 중 제거 불가. 먼저 스냅샷을 떠 순회 후 일괄 제거한다.
+	std::vector<std::shared_ptr<AActor>> Snapshot = World->GetActorsForIteration();
+	for (const std::shared_ptr<AActor>& Actor : Snapshot)
+		World->DestroyActor(Actor);
+
+	// 타일 레이어/충돌 맵을 새 Level 로 스위칭. UWorld 는 LEVEL_COUNT 개 세트를 프리로드한 상태이므로 디스크 재로드는 없다.
+	World->SetCurrentLevelID(static_cast<int32>(pkt.new_level_id()));
+
+	ScreenLog(L"[Client] S_PORTAL_TELEPORT new_level=%u spawn=(%d,%d)",
+		pkt.new_level_id(), pkt.spawn_tile_x(), pkt.spawn_tile_y());
+	return true;
+}
+
+bool Handle_S_PLAYER_LEFT(PacketSessionRef& /*session*/, Protocol::S_PLAYER_LEFT& pkt)
+{
+	// 같은 Level 에 있던 다른 플레이어가 퇴장/Portal 이동으로 사라졌음을 알린다. 해당 Actor 를 월드에서 제거.
+	Game* Instance = Game::GetInstance();
+	if (Instance == nullptr) return false;
+	UWorld* World = Instance->GetWorld();
+	if (World == nullptr) return false;
+
+	auto Player = FindPlayerActor(World, pkt.player_id());
+	if (Player == nullptr) return true;
+
+	World->DestroyActor(Player);
+	ScreenLog(L"[Client] S_PLAYER_LEFT id=%llu", pkt.player_id());
+	return true;
+}
+
+bool Handle_S_PLAYER_ATTACK(PacketSessionRef& /*session*/, Protocol::S_PLAYER_ATTACK& pkt)
+{
+	// 같은 Level 의 다른 플레이어가 공격 액션을 시작했음을 알린다. 공격자 본인은 서버에서 ExceptID 로 제외되므로 이 핸들러에 도달하지 않는다.
+	Game* Instance = Game::GetInstance();
+	if (Instance == nullptr) return false;
+	UWorld* World = Instance->GetWorld();
+
+	auto Player = FindPlayerActor(World, pkt.player_id());
+	if (Player == nullptr) return true;
+
+	Player->OnServerAttack();
+	ScreenLog(L"[Client] S_PLAYER_ATTACK id=%llu", pkt.player_id());
 	return true;
 }

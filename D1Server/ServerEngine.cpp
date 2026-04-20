@@ -7,7 +7,9 @@
 #include "World/World.h"
 
 #include <iostream>
+#include <thread>
 #include <chrono>
+#include <conio.h>
 
 bool ServerEngine::Init()
 {
@@ -34,10 +36,12 @@ bool ServerEngine::Init()
 	std::string Path(ExePath);
 	const size_t LastSep = Path.find_last_of("\\/");
 	const std::string BaseDir = (LastSep != std::string::npos) ? Path.substr(0, LastSep + 1) : std::string();
-	const std::string CollisionCsvPath = BaseDir + "..\\..\\Resource\\Collision_Collision.csv";
 
-	// World 초기화 — 각 Level 이 CollisionMap 을 자체 로드한다.
-	World::GetInstance().Init(CollisionCsvPath);
+	// Resource 루트 디렉토리 — World 가 LevelFolders[] 와 조합해 Level 별 CSV 경로를 만든다.
+	const std::string ResourceBaseDir = BaseDir + "..\\..\\Resource\\";
+
+	// World 초기화 — 각 Level 이 자신의 LevelID 에 해당하는 CollisionMap 을 로드한다.
+	World::GetInstance().Init(ResourceBaseDir);
 
 	std::cout << "[Engine] Init\n";
 	return true;
@@ -46,40 +50,37 @@ bool ServerEngine::Init()
 void ServerEngine::BeginPlay()
 {
 	World::GetInstance().BeginPlay();
-
-	// TimerLoop 스레드 시작 — 20ms 주기로 각 Level 의 JobQueue 에 TickJob 을 push 한다.
-	bRunning.store(true, std::memory_order_relaxed);
-	TimerThread = std::thread([this]() { TimerLoop(); });
-
 	std::cout << "[Engine] BeginPlay\n";
+}
+
+void ServerEngine::Tick()
+{
+	static constexpr int32 TickIntervalMs = 20;
+	auto LastTime = std::chrono::steady_clock::now();
+	while (true)
+	{
+		// Enter 키(CR) 입력 감지 시에만 루프 탈출. 다른 키는 소비하고 무시.
+		if (_kbhit() && _getch() == '\r')
+			break;
+
+		// 이전 Tick 이후 경과한 실제 시간(초) 을 측정해 World 에 전달. 고정 20ms 가 아니라 Client 와 동일한 DeltaTime 모델.
+		const auto Now = std::chrono::steady_clock::now();
+		const float DeltaTime = std::chrono::duration<float>(Now - LastTime).count();
+		LastTime = Now;
+
+		World::GetInstance().Tick(DeltaTime);
+		std::this_thread::sleep_for(std::chrono::milliseconds(TickIntervalMs));
+	}
 }
 
 void ServerEngine::Destroy()
 {
-	// 1. TimerLoop 종료
-	bRunning.store(false, std::memory_order_relaxed);
-	if (TimerThread.joinable())
-		TimerThread.join();
-	std::cout << "[Engine] TimerLoop stopped\n";
-
-	// 2. World → Level 종료
+	// World → Level 종료
 	World::GetInstance().Destroy();
 
-	// 3. 싱글톤 매니저 정리
+	// 싱글톤 매니저 정리
 	PoolManager::GetInstance().Shutdown();
 	ThreadManager::GetInstance().DestroyAllThreads();
 
 	std::cout << "[Engine] Destroy\n";
-}
-
-void ServerEngine::TimerLoop()
-{
-	static constexpr int32 TickIntervalMs = 20;
-	while (bRunning.load(std::memory_order_relaxed))
-	{
-		std::this_thread::sleep_for(std::chrono::milliseconds(TickIntervalMs));
-		if (bRunning.load(std::memory_order_relaxed) == false)
-			break;
-		World::GetInstance().Tick();
-	}
 }

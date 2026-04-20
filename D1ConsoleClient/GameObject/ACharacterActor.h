@@ -37,6 +37,9 @@ public:
 	/** 서버 사망 패킷 수신 시 호출. 기본 구현은 HP=0 세팅. */
 	virtual void OnServerDied();
 
+	/** 서버 공격 액션 패킷 수신 시 호출. 기본 구현은 BeginAttack() 으로 애니메이션만 재생. */
+	virtual void OnServerAttack();
+
 protected:
 	/** 파생 클래스는 공격 클립 1사이클 재생 시간(초)을 반환한다. bIsAttacking 해제 기준. */
 	virtual float GetAttackDuration() const = 0;

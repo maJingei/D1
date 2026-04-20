@@ -112,7 +112,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard>stdcpp23</LanguageStandard>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <AdditionalIncludeDirectories>$(SolutionDir)D1Server;$(SolutionDir)D1ServerCore;$(SolutionDir)Libraries\Include;$(SolutionDir)Common;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
@@ -159,7 +159,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard>stdcpp23</LanguageStandard>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <AdditionalIncludeDirectories>$(SolutionDir)D1Server;$(SolutionDir)D1ServerCore;$(SolutionDir)Libraries\Include;$(SolutionDir)Common;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
@@ -182,6 +182,7 @@
   <ItemGroup>
     <ClInclude Include="GameObject\AActor.h" />
     <ClInclude Include="GameObject\AMonsterActor.h" />
+    <ClInclude Include="GameObject\APortalActor.h" />
     <ClInclude Include="Network\ClientPacketHandler.h" />
     <ClInclude Include="Network\GameServerSession.h" />
     <ClInclude Include="Network\ServerService.h" />
@@ -210,6 +211,9 @@
     <None Include="$(SolutionDir)Common\protoBuf\Protocol.proto" />
     <None Include="$(SolutionDir)Common\Protocol.pb.h" />
     <None Include="$(SolutionDir)GenPackets.bat" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="DB\" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

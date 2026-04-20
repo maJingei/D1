@@ -56,6 +56,11 @@ void ACharacterActor::OnServerDied()
 	HP = 0;
 }
 
+void ACharacterActor::OnServerAttack() 
+{ 
+    BeginAttack();
+}
+
 void ACharacterActor::BeginAttack()
 {
 	bIsAttacking = true;
@@ -67,15 +72,6 @@ void ACharacterActor::BeginMoveTo(int32 NextTileX, int32 NextTileY)
 	TilePos = { static_cast<float>(NextTileX), static_cast<float>(NextTileY) };
 	TargetPos = TilePos * static_cast<float>(TileSize);
 	bIsMoving = true;
-}
-
-void ACharacterActor::WarpTo(int32 TileX, int32 TileY)
-{
-	TilePos = { static_cast<float>(TileX), static_cast<float>(TileY) };
-	TargetPos = TilePos * static_cast<float>(TileSize);
-	X = TargetPos.X;
-	Y = TargetPos.Y;
-	bIsMoving = false;
 }
 
 void ACharacterActor::UpdateAnimationState()
@@ -114,4 +110,13 @@ void ACharacterActor::UpdateMovement(float DeltaTime)
 		X += Dir.X * Step;
 		Y += Dir.Y * Step;
 	}
+}
+
+void ACharacterActor::WarpTo(int32 TileX, int32 TileY)
+{
+	TilePos = { static_cast<float>(TileX), static_cast<float>(TileY) };
+	TargetPos = TilePos * static_cast<float>(TileSize);
+	X = TargetPos.X;
+	Y = TargetPos.Y;
+	bIsMoving = false;
 }

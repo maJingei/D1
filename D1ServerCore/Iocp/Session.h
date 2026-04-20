@@ -4,12 +4,12 @@
 #include <memory>
 #include <queue>
 #include <atomic>
+#include <mutex>
 #include "Iocp/IocpObject.h"
 #include "Iocp/IocpEvent.h"
 #include "Iocp/NetAddress.h"
 #include "Iocp/RecvBuffer.h"
 #include "Iocp/SendBuffer.h"
-#include "Job/JobQueue.h"
 
 class Service;
 
@@ -31,7 +31,7 @@ public:
 	/** WSARecv를 등록하여 수신 대기를 시작한다. */
 	void RegisterRecv();
 
-	/** SendBuffer 를 SendSerializer Job 으로 래핑하여 Push 한다. */
+	/** SendBuffer 송신 예약. 내부 SendLock 보호 하에 즉시 DoSend 본문을 실행한다. */
 	void Send(SendBufferRef InSendBuffer);
 
 	/** ConnectEx를 호출하여 서버에 연결한다. (클라이언트 측) */
@@ -85,14 +85,8 @@ private:
 	/** IOCP Send 완료 콜백. */
 	void ProcessSend(int32 NumOfBytes);
 
-	/** 송신 큐에서 모아둔 SendBuffer 전체를 WSABUF 배열로 묶어 한 번에 전송한다. SendSerializer 직렬화 컨텍스트 전용. */
+	/** 송신 큐에서 모아둔 SendBuffer 전체를 WSABUF 배열로 묶어 한 번에 전송한다. SendLock 보호 하에서만 호출된다. */
 	void RegisterSend();
-
-	/** Send 실제 처리 — SendSerializer FlushJob 컨텍스트에서만 호출된다. */
-	void DoSend(SendBufferRef InSendBuffer);
-
-	/** ProcessSend 실제 처리 — SendSerializer FlushJob 컨텍스트에서만 호출된다. */
-	void DoProcessSend(int32 NumOfBytes);
 
 	SOCKET Socket = INVALID_SOCKET;
 
@@ -105,17 +99,17 @@ private:
 	std::weak_ptr<Service> OwnerService;
 
 	/*-----------------------------------------------------------------*/
-	/*  Send 경로 직렬화기                                              */
+	/*  Send 경로 동기화                                                */
 	/*-----------------------------------------------------------------*/
 
-	/** Session 전용 JobQueue. */
-	std::shared_ptr<JobQueue> SendSerializer;
+	/** Send 경로(SendQueue, bSendRegistered, RegisterSend/WSASend) 접근을 보호하는 mutex. */
+	std::mutex SendLock;
 
 	/*-----------------------------------------------------------------*/
 	/*  Send 경로 상태 (Scatter-Gather 모델)                            */
 	/*-----------------------------------------------------------------*/
 
-	/** 송신 대기 중인 SendBuffer 큐. SendSerializer 직렬화로 보호 — 별도 락 없음. */
+	/** 송신 대기 중인 SendBuffer 큐. SendLock 보호. */
 	std::queue<SendBufferRef> SendQueue;
 
 	/** 이미 RegisterSend 가 진행 중인지 표시하는 플래그. */

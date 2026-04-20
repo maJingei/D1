@@ -2,22 +2,28 @@
 
 #include "Network/ClientPacketHandler.h"
 #include "Network/GameServerSession.h"
+#include "World/World.h"
 #include "UCollisionMap.h"
 #include "Iocp/Session.h"
 
 #include <iostream>
 
-void Level::Init(const std::string& CollisionCsvPath, int32 InLevelID)
+void Level::Init(const std::string& CollisionCsvPath, int32 InLevelID, const FPortalConfig& InPortalConfig)
 {
 	LevelID = InLevelID;
-	Queue = std::make_shared<JobQueue>();
 
 	// CollisionMap 은 Level 당 1개 — 다른 Level 과 공유하지 않는다.
 	LoadCollisionMap(CollisionCsvPath);
 
-	// 고정 좌표에 Monster 1마리 스폰
+	std::shared_ptr<Level> Self = std::static_pointer_cast<Level>(shared_from_this());
+
+	// 고정 좌표에 Monster 1마리 스폰.
 	const uint64 MonsterID = NextMonsterID++;
-	Monsters[MonsterID] = std::make_shared<AMonsterActor>(MonsterID, MonsterSpawnTileX, MonsterSpawnTileY, shared_from_this());
+	Monsters[MonsterID] = std::make_shared<AMonsterActor>(MonsterID, MonsterSpawnTileX, MonsterSpawnTileY, Self);
+
+	// Portal 1개 스폰 — 좌표/대상은 World 가 Level 별로 주입한 FPortalConfig 에서 받는다.
+	const uint64 PortalID = NextPortalID++;
+	Portals[PortalID] = std::make_shared<APortalActor>(PortalID, InPortalConfig, Self);
 }
 
 void Level::LoadCollisionMap(const std::string& CollisionCsvPath)
@@ -28,8 +34,24 @@ void Level::LoadCollisionMap(const std::string& CollisionCsvPath)
 	{
 		CollisionMap = std::move(Collision);
 		bCollisionLoaded = true;
+
+		// Walkable 타일 좌표 전체 스캔 precompute — World::EnterAnyLevel 이 PlayerID % size 로 스폰 타일을 뽑는 소스.
+		WalkableTiles.clear();
+		const int32 Rows = CollisionMap->GetRows();
+		const int32 Cols = CollisionMap->GetCols();
+		WalkableTiles.reserve(static_cast<size_t>(Rows) * static_cast<size_t>(Cols));
+		for (int32 Y = 0; Y < Rows; ++Y)
+		{
+			for (int32 X = 0; X < Cols; ++X)
+			{
+				if (!CollisionMap->IsBlocked(X, Y))
+					WalkableTiles.emplace_back(X, Y);
+			}
+		}
 	}
-	std::cout << "[Level " << LevelID << "] CollisionMap " << (bLoaded ? "loaded" : "failed") << ": " << CollisionCsvPath << "\n";
+	std::cout << "[Level " << LevelID << "] CollisionMap " << (bLoaded ? "loaded" : "failed")
+		<< " walkable=" << WalkableTiles.size()
+		<< ": " << CollisionCsvPath << "\n";
 }
 
 void Level::BeginPlay()
@@ -43,40 +65,8 @@ void Level::Destroy()
 }
 
 // ---------------------------------------------------------------------------
-// 공개 API — 모두 Job 으로 큐잉하여 내부 상태를 단일 스레드 접근으로 보호한다.
+// 공개 API 래퍼는 제거됨. 외부 호출자는 DoAsync(&Level::Do_, args...) 로 직접 큐잉한다.
 // ---------------------------------------------------------------------------
-
-void Level::Enter(uint64 PlayerID, std::shared_ptr<GameServerSession> Session)
-{
-	Queue->PushJob(std::make_shared<Job>([Self = shared_from_this(), PlayerID, Session]()
-	{
-		Self->DoEnter(PlayerID, std::move(Session));
-	}));
-}
-
-void Level::Leave(uint64 PlayerID)
-{
-	Queue->PushJob(std::make_shared<Job>([Self = shared_from_this(), PlayerID]()
-	{
-		Self->DoLeave(PlayerID);
-	}));
-}
-
-void Level::TryMove(uint64 PlayerID, Protocol::Direction Dir, uint64 ClientSeq)
-{
-	Queue->PushJob(std::make_shared<Job>([Self = shared_from_this(), PlayerID, Dir, ClientSeq]()
-	{
-		Self->DoTryMove(PlayerID, Dir, ClientSeq);
-	}));
-}
-
-void Level::TryAttack(uint64 PlayerID)
-{
-	Queue->PushJob(std::make_shared<Job>([Self = shared_from_this(), PlayerID]()
-	{
-		Self->DoTryAttack(PlayerID);
-	}));
-}
 
 bool Level::FindNearestPlayer(FTileNode InNode, uint64& OutTargetID, FTileNode& OutNode)
 {
@@ -86,6 +76,8 @@ bool Level::FindNearestPlayer(FTileNode InNode, uint64& OutTargetID, FTileNode& 
 
 	for (const auto& [ID, Tile] : Players)
 	{
+		// 사망 상태 플레이어는 관전 세션으로 남아있을 뿐이므로 몬스터 타겟 후보에서 제외.
+		if (Tile.bIsDead) continue;
 		FTileNode PlayerTile{Tile.TileX, Tile.TileY};
 		const int32 Dist = ManhattanDistance(InNode, PlayerTile);
 		if (Dist < BestDist) { BestDist = Dist; BestID = ID; BestTile = PlayerTile; }
@@ -108,32 +100,12 @@ bool Level::CalculatePlayerTileByID(uint64 PlayerID, FTileNode& OutNode)
 	return false;	
 }
 
-void Level::Broadcast(SendBufferRef Buffer, uint64 ExceptID)
-{
-	Queue->PushJob(std::make_shared<Job>([Self = shared_from_this(), Buffer, ExceptID]()
-	{
-		Self->DoBroadcast(Buffer, ExceptID);
-	}));
-}
-
-void Level::PushTickJob()
-{
-	Queue->PushJob(std::make_shared<Job>([Self = shared_from_this()]()
-	{
-		Self->DoTick();
-	}));
-}
-
 // ---------------------------------------------------------------------------
-// 내부 구현 — JobQueue 안에서만 실행. 락 없음.
+// 내부 구현 — DoAsync 로만 큐잉되어 실행. JobQueue 직렬화로 보호, 별도 락 없음.
 // ---------------------------------------------------------------------------
 
-void Level::DoEnter(uint64 PlayerID, std::shared_ptr<GameServerSession> Session)
+void Level::DoEnter(uint64 PlayerID, std::shared_ptr<GameServerSession> Session, int32 TileX, int32 TileY, bool bFromPortal)
 {
-	// 스폰 좌표 계산
-	const int32 TileX = SpawnBaseTileX + static_cast<int32>((PlayerID - 1) * SpawnStrideX);
-	const int32 TileY = SpawnBaseTileY;
-
 	// 스탯은 PlayerEntry 기본값(HP=20, MaxHP=20, AttackDamage=5, LastDir=DOWN)을 사용한다.
 	// 향후 캐릭터 클래스/장비에 따라 달라질 수 있도록 인스턴스 단위 보유.
 	PlayerEntry NewEntry;
@@ -141,6 +113,13 @@ void Level::DoEnter(uint64 PlayerID, std::shared_ptr<GameServerSession> Session)
 	NewEntry.TileX = TileX;
 	NewEntry.TileY = TileY;
 	NewEntry.Session = Session;
+	// 이동 속도는 레벨 공통 기본값으로 초기화 — 추후 캐릭터/장비/버프로 개별화 시 여기만 교체.
+	NewEntry.TileMoveSpeed = DefaultPlayerTileMoveSpeed;
+	// Portal 경유로 들어온 경우엔 다음 이동 시 Portal 트리거를 건너뛰기 위해 플래그를 set 한다.
+	NewEntry.bJustTeleported = bFromPortal;
+	// CharacterType 자동 배정 — PlayerID 해시로 3종(Default/Female/Dwarf) 에 분산.
+	// 결정론적이라 같은 PlayerID 는 항상 같은 캐릭터가 되며, DB 연동 이후엔 이 자리를 DB 로드 값으로 교체한다.
+	NewEntry.CharacterType = static_cast<Protocol::CharacterType>(PlayerID % 3);
 
 	// 기존 플레이어 스냅샷 수집 (자신 추가 전)
 	std::vector<PlayerEntry> Others;
@@ -153,6 +132,7 @@ void Level::DoEnter(uint64 PlayerID, std::shared_ptr<GameServerSession> Session)
 
 	std::cout << "[Level " << LevelID << "] Enter: id=" << PlayerID
 		<< " spawn=(" << TileX << "," << TileY << ")"
+		<< (bFromPortal ? " [portal]" : " [initial]")
 		<< " others=" << Others.size() << "\n";
 
 	// S_ENTER_GAME 응답 — 본인 + 기존 플레이어 + 몬스터
@@ -161,12 +141,17 @@ void Level::DoEnter(uint64 PlayerID, std::shared_ptr<GameServerSession> Session)
 	EnterRes.set_tile_x(TileX);
 	EnterRes.set_tile_y(TileY);
 	EnterRes.set_room_id(static_cast<uint32>(LevelID));
+	// 클라가 동일한 쿨다운으로 로컬 입력을 강제하도록 서버 기준 TileMoveSpeed 를 실어 보낸다.
+	EnterRes.set_move_speed(DefaultPlayerTileMoveSpeed);
+	// 본인 CharacterType 은 위에서 NewEntry 에 기록한 값을 그대로 재사용.
+	EnterRes.set_character_type(static_cast<Protocol::CharacterType>(PlayerID % 3));
 	for (const auto& Entry : Others)
 	{
 		Protocol::PlayerInfo* Info = EnterRes.add_others();
 		Info->set_player_id(Entry.PlayerID);
 		Info->set_tile_x(Entry.TileX);
 		Info->set_tile_y(Entry.TileY);
+		Info->set_character_type(Entry.CharacterType);
 	}
 	for (const auto& [MID, Monster] : Monsters)
 	{
@@ -182,24 +167,37 @@ void Level::DoEnter(uint64 PlayerID, std::shared_ptr<GameServerSession> Session)
 	SpawnPkt.set_player_id(PlayerID);
 	SpawnPkt.set_tile_x(TileX);
 	SpawnPkt.set_tile_y(TileY);
+	SpawnPkt.set_character_type(static_cast<Protocol::CharacterType>(PlayerID % 3));
 	DoBroadcast(ClientPacketHandler::MakeSendBuffer(SpawnPkt), PlayerID);
 }
 
-void Level::DoLeave(uint64 PlayerID)
+void Level::DoLeave(uint64 PlayerID) 
+{ 
+    DoRemovePlayer(PlayerID);
+}
+
+void Level::DoRemovePlayer(uint64 PlayerID)
 {
 	Players.erase(PlayerID);
 	for (auto& [MID, Monster] : Monsters)
 		Monster->OnPlayerLeft(PlayerID);
+
+	// 남은 플레이어들에게 퇴장 알림. 퇴장자는 이미 Players 에서 제거됐으므로 ExceptID=0 으로 충분.
+	Protocol::S_PLAYER_LEFT LeftPkt;
+	LeftPkt.set_player_id(PlayerID);
+	DoBroadcast(ClientPacketHandler::MakeSendBuffer(LeftPkt), 0);
 }
 
-void Level::DoTick()
+void Level::Tick(float DeltaTime)
 {
 	if (Players.empty())
 		return;
 
+	// Monster::ServerTick 은 아직 int32 ms 시그니처라 DeltaTime(초) 을 ms 로 변환해 전달.
+	const int32 DeltaMs = static_cast<int32>(DeltaTime * 1000.0f);
 	for (auto& [MID, Monster] : Monsters)
 	{
-		Monster->ServerTick(TickIntervalMs);
+		Monster->ServerTick(DeltaMs);
 	}
 }
 
@@ -259,8 +257,14 @@ void Level::BroadcastMonsterAttack(uint64 MonsterID, uint64 TargetPlayerID)
 	BroadcastPlayerDamaged(TargetPlayerID, Target.HP, Target.MaxHP);
 	if (Target.HP <= 0)
 	{
+		// 관전 모드: Players 맵에는 Session 을 남겨 브로드캐스트(몬스터/타 플레이어 이동 등)를 계속 수신하게 한다.
+		// 클라에서는 S_PLAYER_DIED 수신 시 해당 Actor 를 월드에서 제거하여 화면 상의 캐릭터만 증발한다.
 		Target.bIsDead = true;
 		BroadcastPlayerDied(TargetPlayerID);
+
+		// 이미 락온된 몬스터들의 타겟을 해제한다. FindNearestPlayer 필터는 새 타겟 탐색에만 적용되므로 별도로 필요.
+		for (auto& [MID, Monster] : Monsters)
+			Monster->OnPlayerLeft(TargetPlayerID);
 	}
 }
 
@@ -323,6 +327,11 @@ void Level::DoTryAttack(uint64 PlayerID)
 	const int32 TargetTileX = Self.TileX + DeltaX;
 	const int32 TargetTileY = Self.TileY + DeltaY;
 
+	// 공격 액션 브로드캐스트 — 헛스윙/히트 무관하게 항상 송신. 본인은 이미 로컬 애니메이션 재생 중이므로 ExceptID=PlayerID 로 제외.
+	Protocol::S_PLAYER_ATTACK AttackPkt;
+	AttackPkt.set_player_id(PlayerID);
+	DoBroadcast(ClientPacketHandler::MakeSendBuffer(AttackPkt), PlayerID);
+
 	// 2. 1칸 앞 타일에 있는 몬스터 검색. 없으면 헛스윙으로 종료(패킷 송신 없음).
 	uint64 HitMonsterID = 0;
 	std::shared_ptr<AMonsterActor> HitMonster;
@@ -363,14 +372,15 @@ bool Level::ValidateMove(const PlayerEntry& Self, int32 NextTileX, int32 NextTil
 	if (CollisionMap == nullptr || CollisionMap->IsBlocked(NextTileX, NextTileY))
 		return false;
 
-	// 3) 다른 플레이어 점유 검사.
-	for (const auto& Pair : Players)
-	{
-		if (Pair.first == Self.PlayerID) continue;
-		if (Pair.second.bIsDead) continue;
-		if (Pair.second.TileX == NextTileX && Pair.second.TileY == NextTileY)
-			return false;
-	}
+	// 3) Player 간 충돌 검사 — 현재는 비활성. LoadBot 다량 접속 시 시각적 다양성 확보 +
+	//    서버 reject 폭증을 막기 위해 Player 끼리 같은 타일을 공유 가능. DB/팀 기능 도입 시 재활성 검토.
+	// for (const auto& Pair : Players)
+	// {
+	//     if (Pair.first == Self.PlayerID) continue;
+	//     if (Pair.second.bIsDead) continue;
+	//     if (Pair.second.TileX == NextTileX && Pair.second.TileY == NextTileY)
+	//         return false;
+	// }
 
 	// 4) 몬스터 점유 검사.
 	for (const auto& Pair : Monsters)
@@ -394,6 +404,10 @@ void Level::DoTryMove(uint64 PlayerID, Protocol::Direction Dir, uint64 ClientSeq
 	if (Self.bIsDead)
 		return;
 
+	// ClientSeq 단조성 가드 — 이미 수락했던 seq 이하의 값이 오면 무시.
+	if (ClientSeq <= Self.LastAcceptedSeq)
+		return;
+
 	// 방향 → 델타 변환. 유효하지 않은 enum 값은 ValidateMove 의 인접 타일 검사에서 걸러진다.
 	int32 DeltaX = 0;
 	int32 DeltaY = 0;
@@ -409,9 +423,26 @@ void Level::DoTryMove(uint64 PlayerID, Protocol::Direction Dir, uint64 ClientSeq
 	const int32 NextTileX = Self.TileX + DeltaX;
 	const int32 NextTileY = Self.TileY + DeltaY;
 
-	// -------------------------------------------------------------------
-	// Client Prediction 모델 — 검증 실패 시 이동자에게만 S_MOVE_REJECT, 성공 시 레벨 전체에 S_MOVE 브로드캐스트.
-	// -------------------------------------------------------------------
+	// 1) 이속핵 차단 — TileMoveSpeed 기반 엄격 쿨다운 검증.
+	//    LastMoveTimeMs == 0 이면 스폰 후 첫 이동이므로 쿨다운 면제.
+	//    ElapsedMs(현재 시간 - 서버에서 마지막으로 측정한 이동 시각) < CooldownMs 이면 정상 쿨다운보다 빨리 온 것 → reject.
+	const uint64 NowMs = ::GetTickCount64();
+	const float CooldownMs = 1000.0f / Self.TileMoveSpeed;
+	const float ElapsedMs = static_cast<float>(NowMs - Self.LastMoveTimeMs);
+	if (Self.LastMoveTimeMs != 0 && ElapsedMs < CooldownMs)
+	{
+		Protocol::S_MOVE_REJECT RejectPkt;
+		RejectPkt.set_player_id(PlayerID);
+		RejectPkt.set_tile_x(Self.TileX);
+		RejectPkt.set_tile_y(Self.TileY);
+		RejectPkt.set_client_seq(ClientSeq);
+		RejectPkt.set_last_accepted_seq(Self.LastAcceptedSeq);
+		if (auto Locked = Self.Session.lock())
+			Locked->Send(ClientPacketHandler::MakeSendBuffer(RejectPkt));
+		return;
+	}
+
+	// 2. 공간검증
 	if (!ValidateMove(Self, NextTileX, NextTileY))
 	{
 		Protocol::S_MOVE_REJECT RejectPkt;
@@ -425,11 +456,12 @@ void Level::DoTryMove(uint64 PlayerID, Protocol::Direction Dir, uint64 ClientSeq
 		return;
 	}
 
-	// 검증 통과 — 위치 + Facing + 수락 seq 갱신 후 브로드캐스트.
+	// 검증 통과 — 위치 + Facing + 수락 seq + 서버 측정 시각 갱신 후 브로드캐스트.
 	Self.TileX = NextTileX;
 	Self.TileY = NextTileY;
 	Self.LastDir = Dir;
 	Self.LastAcceptedSeq = ClientSeq;
+	Self.LastMoveTimeMs = NowMs;
 
 	Protocol::S_MOVE MovePkt;
 	MovePkt.set_player_id(PlayerID);
@@ -438,6 +470,62 @@ void Level::DoTryMove(uint64 PlayerID, Protocol::Direction Dir, uint64 ClientSeq
 	MovePkt.set_dir(Dir);
 	MovePkt.set_client_seq(ClientSeq);
 	DoBroadcast(ClientPacketHandler::MakeSendBuffer(MovePkt), 0);
+
+	// Portal 트리거 검사 — 직전 Portal 전이로 인한 루프를 방지하기 위해 bJustTeleported 는 이동 1회당 1번 소모된다.
+	if (Self.bJustTeleported)
+	{
+		Self.bJustTeleported = false;
+		return;
+	}
+
+	// 새 위치에 Portal 이 있으면 전이 처리. Portal 컨테이너는 작고 이동 성공 빈도도 제한적이므로 선형 탐색 허용.
+	for (const auto& [PID, Portal] : Portals)
+	{
+		if (Portal->GetTileX() == NextTileX && Portal->GetTileY() == NextTileY)
+		{
+			DoPortalTransition(PlayerID, Portal);
+			return;
+		}
+	}
+}
+
+void Level::DoPortalTransition(uint64 PlayerID, std::shared_ptr<APortalActor> Portal)
+{
+	auto It = Players.find(PlayerID);
+	if (It == Players.end())
+		return;
+
+	// Entry 에서 Session 을 먼저 lock — DoRemovePlayer 내부 erase 이후엔 weak_ptr 경로가 사라진다.
+	std::shared_ptr<GameServerSession> Session = It->second.Session.lock();
+
+	const int32 TargetLevelID = Portal->GetTargetLevelID();
+	const int32 TargetTileX = Portal->GetTargetSpawnTileX();
+	const int32 TargetTileY = Portal->GetTargetSpawnTileY();
+
+	std::cout << "[Level " << LevelID << "] PortalTransition: id=" << PlayerID
+		<< " target=(" << TargetLevelID << "," << TargetTileX << "," << TargetTileY << ")\n";
+
+	// 현재 Level 에서 퇴장 — Players 제거 + 몬스터 락온 해제 + S_PLAYER_LEFT 브로드캐스트 일괄 처리.
+	DoRemovePlayer(PlayerID);
+
+	// Session 이 이미 사라진 경우엔 전이 대상만 정리하고 종료.
+	if (Session == nullptr)
+		return;
+
+	// 이동자 본인에게 Portal 전이 신호 — 클라는 이 패킷 수신 시 현재 월드를 비우고 후속 S_ENTER_GAME 을 기다린다.
+	Protocol::S_PORTAL_TELEPORT TeleportPkt;
+	TeleportPkt.set_new_level_id(static_cast<uint32>(TargetLevelID));
+	TeleportPkt.set_spawn_tile_x(TargetTileX);
+	TeleportPkt.set_spawn_tile_y(TargetTileY);
+	Session->Send(ClientPacketHandler::MakeSendBuffer(TeleportPkt));
+
+	// 세션의 LevelID 를 선갱신 — 이후 C_MOVE/C_ATTACK 이 들어오면 바로 대상 Level 로 라우팅되도록.
+	Session->SetLevelID(TargetLevelID);
+
+	// 대상 Level 의 JobQueue 에 DoEnter 큐잉 — bFromPortal=true 로 bJustTeleported 플래그를 세팅하도록 지시.
+	auto TargetLevel = World::GetInstance().GetLevel(TargetLevelID);
+	if (TargetLevel != nullptr)
+		TargetLevel->DoAsync(&Level::DoEnter, PlayerID, Session, TargetTileX, TargetTileY, true);
 }
 
 void Level::DoBroadcast(SendBufferRef Buffer, uint64 ExceptID)

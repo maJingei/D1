@@ -112,7 +112,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard>stdcpp23</LanguageStandard>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <AdditionalIncludeDirectories>$(ProjectDir);$(SolutionDir)D1ServerCore;$(SolutionDir)Libraries\Include;$(SolutionDir)Common;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
@@ -160,7 +160,7 @@ xcopy /s /e /y /i "$(SolutionDir)Resource" "$(OutDir)Resource"</Command>
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard>stdcpp23</LanguageStandard>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <AdditionalIncludeDirectories>$(ProjectDir);$(SolutionDir)D1ServerCore;$(SolutionDir)Libraries\Include;$(SolutionDir)Common;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
@@ -210,6 +210,8 @@ xcopy /s /e /y /i "$(SolutionDir)Resource" "$(OutDir)Resource"</Command>
     <ClInclude Include="GameObject\AnimActor.h" />
     <ClInclude Include="GameObject\ACharacterActor.h" />
     <ClInclude Include="GameObject\APlayerActor.h" />
+    <ClInclude Include="GameObject\APlayerFemaleActor.h" />
+    <ClInclude Include="GameObject\APlayerDwarfActor.h" />
     <ClInclude Include="GameObject\AMonsterActor.h" />
     <ClInclude Include="GameObject\Effect\AEffectActor.h" />
     <ClInclude Include="GameObject\Effect\AHitEffectActor.h" />

@@ -53,7 +53,7 @@ int main(int argc, char* argv[])
 
 	// ── Step 4: 워커 스레드 생성 ────────────────────────────────
 	static constexpr int32 IOCP_WORKER_COUNT = 5;
-	static constexpr int32 FLUSH_WORKER_COUNT = 3;
+	static constexpr int32 FLUSH_WORKER_COUNT = 5;
 
 	ThreadManager& Manager = ThreadManager::GetInstance();
 
@@ -90,8 +90,8 @@ int main(int argc, char* argv[])
 
 	Manager.Launch();
 
-	// ── Step 5: Enter 키로 종료 대기 ────────────────────────────
-	std::cin.get();
+	// ── Step 5: 메인 Tick 루프 — Enter 키 감지 시 복귀한다. ─────
+	Engine.Tick();
 
 	// ── Step 6: 종료 시퀀스 ─────────────────────────────────────
 	std::cout << "[Server] Shutting down...\n";
@@ -119,12 +119,14 @@ int main(int argc, char* argv[])
 	Server.reset();
 	std::cout << "[Server released]\n";
 
-	// (6) Engine Destroy (TimerLoop 정지 → World.Destroy → Level.Destroy → PoolManager.Shutdown → ThreadManager 정리)
+	// (6) 메인 스레드 TLS SendBufferChunk 참조 해제.
+	SendBufferManager::ShutdownThread();
+
+	// (7) Engine Destroy (TimerLoop 정지 → World.Destroy → Level.Destroy → PoolManager.Shutdown → ThreadManager 정리)
 	Engine.Destroy();
 
-	// (7) Winsock + TLS 정리
+	// (8) Winsock 정리
 	SocketUtils::Cleanup();
-	SendBufferManager::ShutdownThread();
 
 	std::cout << "[Server] Shutdown complete\n";
 	return 0;

@@ -17,9 +17,6 @@ public:
 	/** S_MONSTER_MOVE 수신 시 호출 — 목표 타일로 보간 이동 시작. */
 	void OnServerMove(int32 InTileX, int32 InTileY);
 
-	/** S_MONSTER_ATTACK 수신 시 호출 — 공격 애니메이션만 트리거. */
-	void OnServerAttack();
-
 protected:
 	virtual float GetAttackDuration() const override { return AttackDuration; }
 

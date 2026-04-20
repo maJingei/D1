@@ -77,6 +77,9 @@
     <ClInclude Include="GameObject\AMonsterActor.h">
       <Filter>Header Files\GameObject</Filter>
     </ClInclude>
+    <ClInclude Include="GameObject\APortalActor.h">
+      <Filter>Header Files\GameObject</Filter>
+    </ClInclude>
     <ClInclude Include="Network\ClientPacketHandler.h">
       <Filter>Header Files\Network</Filter>
     </ClInclude>

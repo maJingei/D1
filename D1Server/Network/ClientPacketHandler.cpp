@@ -36,7 +36,7 @@ bool Handle_C_MOVE(PacketSessionRef& session, Protocol::C_MOVE& pkt)
 	if (LevelID < 0)
 		return true;
 
-	World::GetInstance().GetLevel(LevelID)->TryMove(PlayerID, pkt.dir(), pkt.client_seq());
+	World::GetInstance().GetLevel(LevelID)->DoAsync(&Level::DoTryMove, PlayerID, pkt.dir(), pkt.client_seq());
 	return true;
 }
 
@@ -54,11 +54,11 @@ bool Handle_C_ATTACK(PacketSessionRef& session, Protocol::C_ATTACK& /*pkt*/)
 	const uint64 PlayerID = GameSession->GetPlayerID();
 	if (PlayerID == 0)
 		return false;
-
+	
 	const int32 LevelID = GameSession->GetLevelID();
 	if (LevelID < 0)
 		return true;
 
-	World::GetInstance().GetLevel(LevelID)->TryAttack(PlayerID);
+	World::GetInstance().GetLevel(LevelID)->DoAsync(&Level::DoTryAttack, PlayerID);
 	return true;
 }

@@ -3,6 +3,7 @@
 #include "World/Level.h"
 #include "Network/GameServerSession.h"
 
+#include <cassert>
 #include <iostream>
 
 World& World::GetInstance()
@@ -19,15 +20,17 @@ void World::DestroyInstance()
 	delete &GetInstance();
 }
 
-bool World::Init(const std::string& CollisionCsvPath)
+bool World::Init(const std::string& ResourceBaseDir)
 {
 	std::cout << "[World] Init\n";
 
 	bool bAllLoaded = true;
 	for (int32 i = 0; i < LEVEL_COUNT; i++)
 	{
+		// LevelID 별로 Resource/<LevelFolders[i]>/Collision_Collision.csv 경로를 조립한다.
+		const std::string LevelCsvPath = ResourceBaseDir + LevelFolders[i] + "\\Collision_Collision.csv";
 		Levels[i] = std::make_shared<Level>();
-		Levels[i]->Init(CollisionCsvPath, i);
+		Levels[i]->Init(LevelCsvPath, i, LevelPortalConfigs[i]);
 	}
 
 	return bAllLoaded;
@@ -40,10 +43,10 @@ void World::BeginPlay()
 		Levels[i]->BeginPlay();
 }
 
-void World::Tick()
+void World::Tick(float DeltaTime)
 {
 	for (int32 i = 0; i < LEVEL_COUNT; i++)
-		Levels[i]->PushTickJob();
+		Levels[i]->Tick(DeltaTime);
 }
 
 void World::Destroy()
@@ -61,7 +64,17 @@ uint64 World::EnterAnyLevel(std::shared_ptr<GameServerSession> Session)
 	Session->SetPlayerID(NewID);
 	Session->SetLevelID(LevelID);
 
-	Levels[LevelID]->Enter(NewID, std::move(Session));
+	// 최초 입장 스폰 — 해당 Level 의 CollisionMap 에서 walkable 로 precompute 된 WalkableTiles 중 PlayerID % size 로 순환 인덱싱.
+	// 포탈 전이(Level::DoPortalTransition)는 이 경로를 타지 않고 TargetSpawnTile 고정 좌표를 쓴다.
+	const std::vector<std::pair<int32, int32>>& WalkableTiles = Levels[LevelID]->WalkableTiles;
+	const size_t WalkableCount = WalkableTiles.size();
+	assert(WalkableCount > 0);
+	(void)WalkableCount;
+	const auto& SpawnTile = WalkableTiles[NewID % WalkableTiles.size()];
+	const int32 TileX = SpawnTile.first;
+	const int32 TileY = SpawnTile.second;
+
+	Levels[LevelID]->DoAsync(&Level::DoEnter, NewID, std::move(Session), TileX, TileY, false);
 	return NewID;
 }
 

@@ -13,5 +13,5 @@ void GameServerSession::OnRecvPacket(BYTE* Buffer, int32 Len)
 void GameServerSession::OnDisconnected()
 {
 	if (PlayerID != 0 && LevelID >= 0)
-		World::GetInstance().GetLevel(LevelID)->Leave(PlayerID);
+		World::GetInstance().GetLevel(LevelID)->DoAsync(&Level::DoLeave, PlayerID);
 }

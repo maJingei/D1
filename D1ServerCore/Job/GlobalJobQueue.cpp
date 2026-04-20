@@ -1,4 +1,7 @@
 #include "Job/GlobalJobQueue.h"
+
+#include <iostream>
+
 #include "Job/JobQueue.h"
 #include "Core/CoreMinimal.h"
 
@@ -36,15 +39,15 @@ std::shared_ptr<JobQueue> GlobalJobQueue::Pop(const std::atomic<bool>& bShouldRu
 				{
 					std::shared_ptr<JobQueue> Result = JobQueues.front();
 					JobQueues.pop();
+					// std::cout << "[FlushWorker] TID=" << std::this_thread::get_id()	<< " PopQueue=" << Result.get() << "\n";
 					return Result;
 				}
 			}
-			// 스핀 중 CPU 힌트 — 다른 하이퍼스레드에게 양보한다.
+			// 스핀 중 CPU 힌트 — 다른 하이퍼스레드에게 양보한다. -> 그니까 if문을 실행할 때 cpu가 추측 실행으로 파이프라인에 추측 실행 결과를 가져와서 실행하는 것처럼, Spin도 마찬가지. 근데 YieldProcessor(mm_pause)가 억제하는 것이 바로 추측을 자제하라는 뜻.
 			::YieldProcessor();
 		}
 
 		// 2단계: 스핀에서 못 찾으면 WaitOnAddress 로 슬립한다.
-		// WakeCounter 의 현재 값을 기억해두고, 값이 바뀔 때까지 대기한다.
 		uint32 CapturedCounter;
 		{
 			std::lock_guard<std::mutex> Lock(Mutex);
@@ -53,6 +56,7 @@ std::shared_ptr<JobQueue> GlobalJobQueue::Pop(const std::atomic<bool>& bShouldRu
 			{
 				std::shared_ptr<JobQueue> Result = JobQueues.front();
 				JobQueues.pop();
+				// std::cout << "[FlushWorker] TID=" << std::this_thread::get_id()	<< " PopQueue=" << Result.get() << " (post-sleep)\n";
 				return Result;
 			}
 			CapturedCounter = WakeCounter;

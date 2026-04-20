@@ -1,5 +1,7 @@
 #pragma once
 
+#include <iostream>
+
 #include "Core/CoreMinimal.h"
 #include "Iocp/PacketSession.h"
 
@@ -7,6 +9,11 @@
 class GameServerSession : public PacketSession
 {
 public:
+	~GameServerSession()
+	{
+		std::cout << "GameServerSession::~GameServerSession()" << "\n";
+	}
+	
 	uint64 GetPlayerID() const { return PlayerID; }
 	void SetPlayerID(uint64 InPlayerID) { PlayerID = InPlayerID; }
 
