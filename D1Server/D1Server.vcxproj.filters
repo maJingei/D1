@@ -92,6 +92,9 @@
     <ClInclude Include="World\Level.h">
       <Filter>Header Files\World</Filter>
     </ClInclude>
+    <ClInclude Include="World\PlayerEntry.h">
+      <Filter>Header Files\World</Filter>
+    </ClInclude>
     <ClInclude Include="World\World.h">
       <Filter>Header Files\World</Filter>
     </ClInclude>

@@ -9,6 +9,11 @@
 #include "DB/DBConnectionPool.h"
 #include "DB/DBJobQueue.h"
 #include "DB/DBStatement.h"
+#include "DB/DBPlayerCRUD.h"
+#include "DB/DBMeta.h"
+#include "DB/DBBuildSql.h"
+#include "World/Level.h"
+#include "World/PlayerEntry.h"
 
 #include <iostream>
 #include <thread>
@@ -89,6 +94,95 @@ bool ServerEngine::Init()
 			<< " User=" << UserName
 			<< " Server=" << ServerName << std::endl;
 	});
+
+	// PlayerEntry CRUD smoke (M2) — 고정 PlayerID 로 Insert→Find→Update→Find→Delete 를 순차 실행한다.
+	//   (a) DBPlayer 4개 함수가 실제로 dbo.PlayerEntry 와 왕복 SQL 을 주고받는지
+	//   (b) Update 후 Find 가 갱신 값을 돌려주는지
+	// 를 로그 한 블록으로 확인. 실패해도 서버 부팅은 막지 않는다 — 진단 로그만 찍힘.
+	// dbo.PlayerEntry 테이블이 SSMS 에서 미리 생성돼 있어야 한다 (Schema/PlayerEntry.sql).
+	static constexpr uint64 kSmokePlayerID = 1;
+	DBJobQueue::GetInstance().Schedule([](DBConnection& Conn)
+	{
+		// 초기 행 템플릿. Insert 가 실패(PK 중복)해도 후속 Find/Update/Delete 는 이어간다.
+		PlayerEntry Entry;
+		Entry.PlayerID = kSmokePlayerID;
+		Entry.CharacterType = Protocol::CT_DEFAULT;
+		Entry.LevelID = 0;
+		Entry.TileX = 5;
+		Entry.TileY = 7;
+		Entry.HP = 20;
+		Entry.MaxHP = 20;
+		Entry.AttackDamage = 5;
+		Entry.TileMoveSpeed = 6.0f;
+
+		// (1) Insert — PK 중복이어도 진단 로그만 남기고 계속 진행.
+		if (DBPlayer::Insert(Conn, Entry))
+			std::cout << "[DBPlayer] Insert OK (PlayerID=" << kSmokePlayerID << ")" << std::endl;
+		else
+			std::cout << "[DBPlayer] Insert skipped (already exists or failed, continuing)" << std::endl;
+
+		// (2) Find #1 — Insert 성공/기존 행 둘 다 여기서 값을 확인.
+		PlayerEntry Loaded;
+		if (DBPlayer::Find(Conn, kSmokePlayerID, Loaded) == false)
+		{
+			std::cout << "[DBPlayer] Find FAIL (PlayerID=" << kSmokePlayerID << ")" << std::endl;
+			return;
+		}
+		std::cout << "[DBPlayer] Find OK (PlayerID=" << Loaded.PlayerID
+			<< ", LevelID=" << Loaded.LevelID
+			<< ", TileX=" << Loaded.TileX
+			<< ", TileY=" << Loaded.TileY
+			<< ", HP=" << Loaded.HP << "/" << Loaded.MaxHP << ")" << std::endl;
+
+		// (3) Update — 위치/HP 를 변경해 다음 Find 에서 관찰 가능한 차이를 만든다.
+		Loaded.TileX = 13;
+		Loaded.TileY = 21;
+		Loaded.HP = 9;
+		if (DBPlayer::Update(Conn, Loaded) == false)
+		{
+			std::cout << "[DBPlayer] Update FAIL (PlayerID=" << kSmokePlayerID << ")" << std::endl;
+			return;
+		}
+		std::cout << "[DBPlayer] Update OK (PlayerID=" << kSmokePlayerID << ")" << std::endl;
+
+		// (4) Find #2 — Update 가 영속화되었는지 SELECT 로 재검증.
+		PlayerEntry Reloaded;
+		if (DBPlayer::Find(Conn, kSmokePlayerID, Reloaded) == false)
+		{
+			std::cout << "[DBPlayer] Find(after Update) FAIL" << std::endl;
+			return;
+		}
+		std::cout << "[DBPlayer] Find OK (PlayerID=" << Reloaded.PlayerID
+			<< ", LevelID=" << Reloaded.LevelID
+			<< ", TileX=" << Reloaded.TileX
+			<< ", TileY=" << Reloaded.TileY
+			<< ", HP=" << Reloaded.HP << "/" << Reloaded.MaxHP << ")" << std::endl;
+
+		// (5) Delete — smoke 를 idempotent 하게 종료해 다음 부팅에서도 Insert 부터 다시 시작 가능하게 한다.
+		if (DBPlayer::Delete(Conn, kSmokePlayerID))
+			std::cout << "[DBPlayer] Delete OK (PlayerID=" << kSmokePlayerID << ")" << std::endl;
+		else
+			std::cout << "[DBPlayer] Delete FAIL (PlayerID=" << kSmokePlayerID << ")" << std::endl;
+	});
+
+	// M3 smoke — 매크로 기반 메타데이터 / Build SQL 결과를 main 스레드에서 한 번 덤프한다.
+	// DB 워커를 타지 않는 순수 compile-time 결과물이므로 Schedule 없이 직접 출력.
+	// M2 의 DBPlayer smoke 로그와 공존하며, 두 경로가 같은 테이블 스키마를 공유함을 육안 검증한다.
+	{
+		const auto& Meta = GetTableMetadata<PlayerEntry>();
+		std::cout << "[DB3][Meta] " << Meta.TableName << " (" << Meta.NumColumns << " cols)\n";
+		for (size_t i = 0; i < Meta.NumColumns; ++i)
+		{
+			const auto& C = Meta.Columns[i];
+			std::cout << "  [" << i << "] "
+				<< C.Name << " " << C.SqlType
+				<< (C.bIsPK ? " PK" : "")
+				<< " offset=" << C.Offset
+				<< " size=" << C.Size << "\n";
+		}
+		std::cout << "[DB3][Build] Insert SQL:\n  "	<< BuildInsertSql<PlayerEntry>() << "\n";
+		std::cout << "[DB3][Build] SelectByPk SQL:\n  "	<< BuildSelectByPkSql<PlayerEntry>() << "\n";
+	}
 
 	// World 초기화 — 각 Level 이 자신의 LevelID 에 해당하는 CollisionMap 을 로드한다.
 	World::GetInstance().Init(ResourceBaseDir);

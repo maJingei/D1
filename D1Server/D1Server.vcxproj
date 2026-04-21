@@ -180,9 +180,12 @@
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="DB\DBBuildSql.h" />
     <ClInclude Include="DB\DBConnection.h" />
     <ClInclude Include="DB\DBConnectionPool.h" />
     <ClInclude Include="DB\DBJobQueue.h" />
+    <ClInclude Include="DB\DBMeta.h" />
+    <ClInclude Include="DB\DBPlayerCRUD.h" />
     <ClInclude Include="DB\DBStatement.h" />
     <ClInclude Include="GameObject\AActor.h" />
     <ClInclude Include="GameObject\AMonsterActor.h" />
@@ -193,6 +196,7 @@
     <ClInclude Include="ServerEngine.h" />
     <ClInclude Include="$(SolutionDir)Common\UCollisionMap.h" />
     <ClInclude Include="World\Level.h" />
+    <ClInclude Include="World\PlayerEntry.h" />
     <ClInclude Include="World\World.h" />
   </ItemGroup>
   <ItemGroup>
@@ -200,6 +204,7 @@
     <ClCompile Include="DB\DBConnection.cpp" />
     <ClCompile Include="DB\DBConnectionPool.cpp" />
     <ClCompile Include="DB\DBJobQueue.cpp" />
+    <ClCompile Include="DB\DBPlayerCRUD.cpp" />
     <ClCompile Include="DB\DBStatement.cpp" />
     <ClCompile Include="GameObject\AMonsterActor.cpp" />
     <ClCompile Include="Network\ClientPacketHandler.cpp" />

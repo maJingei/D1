@@ -77,3 +77,63 @@ bool DBStatement::GetColumnString(SQLUSMALLINT ColumnIndex, char* OutBuffer, int
 
 	return true;
 }
+
+bool DBStatement::GetColumnInt32(SQLUSMALLINT ColumnIndex, int32& OutValue)
+{
+	if (Hstmt == SQL_NULL_HSTMT)
+		return false;
+
+	// SQL_C_SLONG 은 4바이트 signed 정수 — SQL Server INT 타입과 1:1.
+	SQLLEN Indicator = 0;
+	SQLINTEGER Value = 0;
+	const SQLRETURN Ret = ::SQLGetData(Hstmt, ColumnIndex, SQL_C_SLONG, &Value, sizeof(Value), &Indicator);
+	if (SQL_SUCCEEDED(Ret) == false)
+	{
+		DBConnection::HandleError(Hstmt, SQL_HANDLE_STMT, L"SQLGetData(INT32)");
+		OutValue = 0;
+		return false;
+	}
+
+	OutValue = (Indicator == SQL_NULL_DATA) ? 0 : static_cast<int32>(Value);
+	return true;
+}
+
+bool DBStatement::GetColumnInt64(SQLUSMALLINT ColumnIndex, int64& OutValue)
+{
+	if (Hstmt == SQL_NULL_HSTMT)
+		return false;
+
+	// SQL_C_SBIGINT 는 8바이트 signed 정수 — SQL Server BIGINT 타입과 1:1. PlayerID 읽기에 사용.
+	SQLLEN Indicator = 0;
+	SQLBIGINT Value = 0;
+	const SQLRETURN Ret = ::SQLGetData(Hstmt, ColumnIndex, SQL_C_SBIGINT, &Value, sizeof(Value), &Indicator);
+	if (SQL_SUCCEEDED(Ret) == false)
+	{
+		DBConnection::HandleError(Hstmt, SQL_HANDLE_STMT, L"SQLGetData(INT64)");
+		OutValue = 0;
+		return false;
+	}
+
+	OutValue = (Indicator == SQL_NULL_DATA) ? 0 : static_cast<int64>(Value);
+	return true;
+}
+
+bool DBStatement::GetColumnFloat(SQLUSMALLINT ColumnIndex, float& OutValue)
+{
+	if (Hstmt == SQL_NULL_HSTMT)
+		return false;
+
+	// SQL_C_FLOAT 는 4바이트 single-precision — SQL Server REAL 과 1:1. TileMoveSpeed 읽기에 사용.
+	SQLLEN Indicator = 0;
+	SQLREAL Value = 0.0f;
+	const SQLRETURN Ret = ::SQLGetData(Hstmt, ColumnIndex, SQL_C_FLOAT, &Value, sizeof(Value), &Indicator);
+	if (SQL_SUCCEEDED(Ret) == false)
+	{
+		DBConnection::HandleError(Hstmt, SQL_HANDLE_STMT, L"SQLGetData(FLOAT)");
+		OutValue = 0.0f;
+		return false;
+	}
+
+	OutValue = (Indicator == SQL_NULL_DATA) ? 0.0f : static_cast<float>(Value);
+	return true;
+}
