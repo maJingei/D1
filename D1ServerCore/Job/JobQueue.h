@@ -34,8 +34,10 @@ public:
 
 	/**
 	 * Job 을 큐에 추가한다. 큐가 비어있던 첫 진입이고 현재 스레드가 다른 Flush 루프 안에 있지 않다면
+	 * inline FlushJob 을 실행하며, 그렇지 않으면 GlobalJobQueue 로 위임한다.
+	 * DB 전용 파생(DBJobQueue) 은 inline flush 를 피하기 위해 이 메서드를 override 한다.
 	 */
-	void PushJob(JobRef&& Job);
+	virtual void PushJob(JobRef&& Job);
 
 	/**
 	 * 현재 큐에 쌓인 Job 을 전부 실행한다.

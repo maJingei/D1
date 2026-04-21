@@ -5,6 +5,10 @@
 #include "Job/GlobalJobQueue.h"
 #include "Network/ClientPacketHandler.h"
 #include "World/World.h"
+#include "DB/DBConnection.h"
+#include "DB/DBConnectionPool.h"
+#include "DB/DBJobQueue.h"
+#include "DB/DBStatement.h"
 
 #include <iostream>
 #include <thread>
@@ -39,6 +43,52 @@ bool ServerEngine::Init()
 
 	// Resource 루트 디렉토리 — World 가 LevelFolders[] 와 조합해 Level 별 CSV 경로를 만든다.
 	const std::string ResourceBaseDir = BaseDir + "..\\..\\Resource\\";
+
+	// DB 연결 풀 초기화 — Login=Load 시점보다 먼저 바닥을 깔아둔다.
+	// Driver 18 기본값이 Encrypt=Yes 이므로 로컬 테스트용 TrustServerCertificate=Yes 를 명시해야 한다.
+	static constexpr int32 kDBPoolSize = 4;
+	const wchar_t* ConnectString =
+		L"Driver={ODBC Driver 18 for SQL Server};"
+		L"Server=localhost\\SQLEXPRESS;"
+		L"Database=GameDB;"
+		L"Trusted_Connection=Yes;"
+		L"TrustServerCertificate=Yes;";
+
+	if (DBConnectionPool::GetInstance().Init(ConnectString, kDBPoolSize) == false)
+	{
+		std::cout << "[Engine] DB pool init failed\n";
+		return false;
+	}
+
+	// Smoke 쿼리 — DB 워커가 기동되면 현재 DB/계정/서버명을 한 번 찍어
+	//   (a) ODBC 가 정말 GameDB 컨텍스트를 잡았는지
+	//   (b) DBJobQueue → DB 워커 → DBConnection → SQL Server 전체 경로가 동작하는지
+	// 를 육안으로 검증한다. 여기서 스케줄만 해두면 워커 스레드가 Launch 된 뒤 Drain 될 때 실행된다.
+	DBJobQueue::GetInstance().Schedule([](DBConnection& Conn)
+	{
+		DBStatement Stmt(Conn.GetHandle());
+		if (Stmt.IsValid() == false)
+			return;
+
+		if (Stmt.ExecuteDirect(L"SELECT DB_NAME(), SUSER_SNAME(), @@SERVERNAME") == false)
+			return;
+
+		if (Stmt.Fetch() == false)
+			return;
+
+		// DB_NAME/SUSER_SNAME/@@SERVERNAME 모두 sysname(nvarchar(128))이지만
+		// 로컬 환경은 ASCII 범위라 narrow 채널로 가져와 std::cout 과 호환시킨다.
+		char DbName[128] = { 0 };
+		char UserName[128] = { 0 };
+		char ServerName[128] = { 0 };
+		Stmt.GetColumnString(1, DbName, sizeof(DbName));
+		Stmt.GetColumnString(2, UserName, sizeof(UserName));
+		Stmt.GetColumnString(3, ServerName, sizeof(ServerName));
+
+		std::cout << "[DB][Smoke] CurrentDB=" << DbName
+			<< " User=" << UserName
+			<< " Server=" << ServerName << std::endl;
+	});
 
 	// World 초기화 — 각 Level 이 자신의 LevelID 에 해당하는 CollisionMap 을 로드한다.
 	World::GetInstance().Init(ResourceBaseDir);
@@ -77,6 +127,10 @@ void ServerEngine::Destroy()
 {
 	// World → Level 종료
 	World::GetInstance().Destroy();
+
+	// DB 풀 해제는 DB 워커 Join 이후 이 시점에서 수행. HDBC 해제가 ODBC 호출을 동반하지만
+	// 이 시점엔 DB 워커가 이미 Join 되어 in-flight SQLExecute 가 없다.
+	DBConnectionPool::GetInstance().Shutdown();
 
 	// 싱글톤 매니저 정리
 	PoolManager::GetInstance().Shutdown();

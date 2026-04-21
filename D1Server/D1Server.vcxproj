@@ -121,7 +121,7 @@
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(SolutionDir)Libraries\Libs\ServerCore\$(Configuration);$(SolutionDir)Libraries\Libs\ProtoBuf\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>D1ServerCore.lib;libprotobufd.lib;Synchronization.lib;ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>D1ServerCore.lib;libprotobufd.lib;Synchronization.lib;ws2_32.lib;odbc32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PreBuildEvent>
       <Command>IF EXIST "$(SolutionDir)Common\protoBuf\Protocol.proto" ("$(SolutionDir)Tools\PacketGenerator\GenPacket.exe" --path "$(SolutionDir)Common\protoBuf\Protocol.proto" --output "$(ProjectDir)Network\ClientPacketHandler" --recv C_ --send S_)</Command>
@@ -170,7 +170,7 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(SolutionDir)Libraries\Libs\ServerCore\$(Configuration);$(SolutionDir)Libraries\Libs\ProtoBuf\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>D1ServerCore.lib;libprotobuf.lib;Synchronization.lib;ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>D1ServerCore.lib;libprotobuf.lib;Synchronization.lib;ws2_32.lib;odbc32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PreBuildEvent>
       <Command>IF EXIST "$(SolutionDir)Common\protoBuf\Protocol.proto" ("$(SolutionDir)Tools\PacketGenerator\GenPacket.exe" --path "$(SolutionDir)Common\protoBuf\Protocol.proto" --output "$(ProjectDir)Network\ClientPacketHandler" --recv C_ --send S_)</Command>
@@ -180,6 +180,10 @@
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="DB\DBConnection.h" />
+    <ClInclude Include="DB\DBConnectionPool.h" />
+    <ClInclude Include="DB\DBJobQueue.h" />
+    <ClInclude Include="DB\DBStatement.h" />
     <ClInclude Include="GameObject\AActor.h" />
     <ClInclude Include="GameObject\AMonsterActor.h" />
     <ClInclude Include="GameObject\APortalActor.h" />
@@ -193,6 +197,10 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="D1Server.cpp" />
+    <ClCompile Include="DB\DBConnection.cpp" />
+    <ClCompile Include="DB\DBConnectionPool.cpp" />
+    <ClCompile Include="DB\DBJobQueue.cpp" />
+    <ClCompile Include="DB\DBStatement.cpp" />
     <ClCompile Include="GameObject\AMonsterActor.cpp" />
     <ClCompile Include="Network\ClientPacketHandler.cpp" />
     <ClCompile Include="Network\GameServerSession.cpp" />
