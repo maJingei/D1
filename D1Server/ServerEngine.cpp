@@ -9,12 +9,13 @@
 #include "DB/DBConnectionPool.h"
 #include "DB/DBJobQueue.h"
 #include "DB/DBStatement.h"
-#include "DB/DBOrm.h"
+#include "DB/DBContext.h"
 #include "DB/DBMeta.h"
 #include "DB/DBBuildSql.h"
 #include "World/Level.h"
 #include "World/PlayerEntry.h"
 
+#include <cassert>
 #include <iostream>
 #include <thread>
 #include <chrono>
@@ -95,14 +96,24 @@ bool ServerEngine::Init()
 			<< " Server=" << ServerName << std::endl;
 	});
 
-	// PlayerEntry CRUD smoke (M3) — 고정 PlayerID 로 Insert→Find→Update→Find→Delete 를 순차 실행한다.
-	//   (a) DBOrm 템플릿 4개 함수가 실제로 dbo.PlayerEntry 와 왕복 SQL 을 주고받는지
+	// PlayerEntry CRUD smoke — 고정 PlayerID 로 Insert→Find→Update→Find→Delete 를 순차 실행한다.
+	//   (a) DBContext::Set<PlayerEntry>() 가 반환하는 DBSet<PlayerEntry> 의 4개 함수가 실제로
+	//       dbo.PlayerEntry 와 왕복 SQL 을 주고받는지
 	//   (b) Update 후 Find 가 갱신 값을 돌려주는지
+	//   (c) Set<T>() 를 두 번 호출하면 같은 인스턴스가 돌아오는지 (M8 Identity Map 전제)
 	// 를 로그 한 블록으로 확인. 실패해도 서버 부팅은 막지 않는다 — 진단 로그만 찍힘.
 	// dbo.PlayerEntry 테이블이 SSMS 에서 미리 생성돼 있어야 한다 (Schema/PlayerEntry.sql).
 	static constexpr uint64 kSmokePlayerID = 1;
 	DBJobQueue::GetInstance().Schedule([](DBConnection& Conn)
 	{
+		DBContext Ctx(Conn);
+		auto& Players = Ctx.Set<PlayerEntry>();
+
+		// 캐시 동작 임시 검증 — 같은 타입의 Set 두 번 요청 시 같은 인스턴스 반환되어야 한다.
+		// (M8 Identity Map 일관성의 전제. 본 마일스톤 한정 검증, 다음 단계에서 제거 예정)
+		[[maybe_unused]] auto& PlayersAgain = Ctx.Set<PlayerEntry>();
+		assert(&Players == &PlayersAgain);
+
 		// 초기 행 템플릿. Insert 가 실패(PK 중복)해도 후속 Find/Update/Delete 는 이어간다.
 		PlayerEntry Entry;
 		Entry.PlayerID = kSmokePlayerID;
@@ -116,19 +127,19 @@ bool ServerEngine::Init()
 		Entry.TileMoveSpeed = 6.0f;
 
 		// (1) Insert — PK 중복이어도 진단 로그만 남기고 계속 진행.
-		if (DBOrm::Insert<PlayerEntry>(Conn, Entry))
-			std::cout << "[DBOrm] Insert OK (PlayerID=" << kSmokePlayerID << ")" << std::endl;
+		if (Players.Insert(Entry))
+			std::cout << "[DBContext] Insert OK (PlayerID=" << kSmokePlayerID << ")" << std::endl;
 		else
-			std::cout << "[DBOrm] Insert skipped (already exists or failed, continuing)" << std::endl;
+			std::cout << "[DBContext] Insert skipped (already exists or failed, continuing)" << std::endl;
 
 		// (2) Find #1 — Insert 성공/기존 행 둘 다 여기서 값을 확인.
 		PlayerEntry Loaded;
-		if (DBOrm::Find<PlayerEntry>(Conn, kSmokePlayerID, Loaded) == false)
+		if (Players.Find(kSmokePlayerID, Loaded) == false)
 		{
-			std::cout << "[DBOrm] Find FAIL (PlayerID=" << kSmokePlayerID << ")" << std::endl;
+			std::cout << "[DBContext] Find FAIL (PlayerID=" << kSmokePlayerID << ")" << std::endl;
 			return;
 		}
-		std::cout << "[DBOrm] Find OK (PlayerID=" << Loaded.PlayerID
+		std::cout << "[DBContext] Find OK (PlayerID=" << Loaded.PlayerID
 			<< ", LevelID=" << Loaded.LevelID
 			<< ", TileX=" << Loaded.TileX
 			<< ", TileY=" << Loaded.TileY
@@ -138,39 +149,39 @@ bool ServerEngine::Init()
 		Loaded.TileX = 13;
 		Loaded.TileY = 21;
 		Loaded.HP = 9;
-		if (DBOrm::Update<PlayerEntry>(Conn, Loaded) == false)
+		if (Players.Update(Loaded) == false)
 		{
-			std::cout << "[DBOrm] Update FAIL (PlayerID=" << kSmokePlayerID << ")" << std::endl;
+			std::cout << "[DBContext] Update FAIL (PlayerID=" << kSmokePlayerID << ")" << std::endl;
 			return;
 		}
-		std::cout << "[DBOrm] Update OK (PlayerID=" << kSmokePlayerID << ")" << std::endl;
+		std::cout << "[DBContext] Update OK (PlayerID=" << kSmokePlayerID << ")" << std::endl;
 
 		// (4) Find #2 — Update 가 영속화되었는지 SELECT 로 재검증.
 		PlayerEntry Reloaded;
-		if (DBOrm::Find<PlayerEntry>(Conn, kSmokePlayerID, Reloaded) == false)
+		if (Players.Find(kSmokePlayerID, Reloaded) == false)
 		{
-			std::cout << "[DBOrm] Find(after Update) FAIL" << std::endl;
+			std::cout << "[DBContext] Find(after Update) FAIL" << std::endl;
 			return;
 		}
-		std::cout << "[DBOrm] Find OK (PlayerID=" << Reloaded.PlayerID
+		std::cout << "[DBContext] Find OK (PlayerID=" << Reloaded.PlayerID
 			<< ", LevelID=" << Reloaded.LevelID
 			<< ", TileX=" << Reloaded.TileX
 			<< ", TileY=" << Reloaded.TileY
 			<< ", HP=" << Reloaded.HP << "/" << Reloaded.MaxHP << ")" << std::endl;
 
 		// (5) Delete — smoke 를 idempotent 하게 종료해 다음 부팅에서도 Insert 부터 다시 시작 가능하게 한다.
-		if (DBOrm::Delete<PlayerEntry>(Conn, kSmokePlayerID))
-			std::cout << "[DBOrm] Delete OK (PlayerID=" << kSmokePlayerID << ")" << std::endl;
+		if (Players.Delete(kSmokePlayerID))
+			std::cout << "[DBContext] Delete OK (PlayerID=" << kSmokePlayerID << ")" << std::endl;
 		else
-			std::cout << "[DBOrm] Delete FAIL (PlayerID=" << kSmokePlayerID << ")" << std::endl;
+			std::cout << "[DBContext] Delete FAIL (PlayerID=" << kSmokePlayerID << ")" << std::endl;
 	});
 
-	// M3 smoke — 매크로 기반 메타데이터 / Build SQL 결과를 main 스레드에서 한 번 덤프한다.
+	// M4 smoke — 매크로 기반 메타데이터 / Build SQL 결과(? 플레이스홀더)를 main 스레드에서 한 번 덤프한다.
 	// DB 워커를 타지 않는 메모리 전용 결과물이므로 Schedule 없이 직접 출력.
-	// 위쪽 DBOrm smoke 로그와 공존하며, 동일한 테이블 스키마를 두 경로가 공유함을 육안 검증한다.
+	// 위쪽 DBContext smoke 로그와 공존하며, 동일한 테이블 스키마를 두 경로가 공유함을 육안 검증한다.
 	{
 		const auto& Meta = GetTableMetadata<PlayerEntry>();
-		std::cout << "[DB3][Meta] " << Meta.TableName << " (" << Meta.NumColumns << " cols)\n";
+		std::cout << "[DB4][Meta] " << Meta.TableName << " (" << Meta.NumColumns << " cols)\n";
 		for (size_t i = 0; i < Meta.NumColumns; ++i)
 		{
 			const auto& C = Meta.Columns[i];
@@ -181,31 +192,19 @@ bool ServerEngine::Init()
 				<< " size=" << C.Size << "\n";
 		}
 
-		// 빌더 출력 덤프용 샘플 row — smoke 시나리오와 동일한 초기값.
-		PlayerEntry Sample;
-		Sample.PlayerID = kSmokePlayerID;
-		Sample.CharacterType = Protocol::CT_DEFAULT;
-		Sample.LevelID = 0;
-		Sample.TileX = 5;
-		Sample.TileY = 7;
-		Sample.HP = 20;
-		Sample.MaxHP = 20;
-		Sample.AttackDamage = 5;
-		Sample.TileMoveSpeed = 6.0f;
-
-		// wstring SQL 을 narrow 로그 채널에 흘리기 위한 ASCII 한정 변환 — 컬럼/테이블/숫자만 들어가므로 안전.
+		// wstring SQL 을 narrow 로그 채널에 흘리기 위한 ASCII 한정 변환 — 컬럼/테이블/? 만 들어가므로 안전.
 		auto LogSql = [](const char* Label, const std::wstring& SqlW)
 		{
 			std::string SqlA;
 			SqlA.reserve(SqlW.size());
 			for (wchar_t C : SqlW) SqlA.push_back(static_cast<char>(C));
-			std::cout << "[DB3][Build] " << Label << ":\n  " << SqlA << "\n";
+			std::cout << "[DB4][Build] " << Label << ":\n  " << SqlA << "\n";
 		};
 
-		LogSql("Insert     SQL", BuildInsertSql<PlayerEntry>(Sample));
-		LogSql("SelectByPk SQL", BuildSelectByPkSql<PlayerEntry>(kSmokePlayerID));
-		LogSql("Update     SQL", BuildUpdateSql<PlayerEntry>(Sample));
-		LogSql("DeleteByPk SQL", BuildDeleteByPkSql<PlayerEntry>(kSmokePlayerID));
+		LogSql("Insert     SQL", BuildInsertSql<PlayerEntry>());
+		LogSql("SelectByPk SQL", BuildSelectByPkSql<PlayerEntry>());
+		LogSql("Update     SQL", BuildUpdateSql<PlayerEntry>());
+		LogSql("DeleteByPk SQL", BuildDeleteByPkSql<PlayerEntry>());
 	}
 
 	// World 초기화 — 각 Level 이 자신의 LevelID 에 해당하는 CollisionMap 을 로드한다.

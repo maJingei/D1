@@ -37,6 +37,35 @@ bool DBStatement::ExecuteDirect(const wchar_t* Sql)
 	return false;
 }
 
+bool DBStatement::Prepare(const wchar_t* Sql)
+{
+	if (Hstmt == SQL_NULL_HSTMT)
+		return false;
+
+	// SQLPrepareW 는 드라이버에 SQL 텍스트를 등록만 한다 — 실제 전송은 SQLExecute.
+	const SQLRETURN Ret = ::SQLPrepareW(Hstmt, reinterpret_cast<SQLWCHAR*>(const_cast<wchar_t*>(Sql)), SQL_NTS);
+	if (SQL_SUCCEEDED(Ret) == false)
+	{
+		DBConnection::HandleError(Hstmt, SQL_HANDLE_STMT, L"SQLPrepareW");
+		return false;
+	}
+	return true;
+}
+
+bool DBStatement::Execute()
+{
+	if (Hstmt == SQL_NULL_HSTMT)
+		return false;
+
+	// SQL_NO_DATA: UPDATE/DELETE 가 0 행을 건드린 경우. 성공으로 취급 (ExecuteDirect 와 동일 의미).
+	const SQLRETURN Ret = ::SQLExecute(Hstmt);
+	if (Ret == SQL_SUCCESS || Ret == SQL_SUCCESS_WITH_INFO || Ret == SQL_NO_DATA)
+		return true;
+
+	DBConnection::HandleError(Hstmt, SQL_HANDLE_STMT, L"SQLExecute");
+	return false;
+}
+
 bool DBStatement::Fetch()
 {
 	if (Hstmt == SQL_NULL_HSTMT)
@@ -135,5 +164,101 @@ bool DBStatement::GetColumnFloat(SQLUSMALLINT ColumnIndex, float& OutValue)
 	}
 
 	OutValue = (Indicator == SQL_NULL_DATA) ? 0.0f : static_cast<float>(Value);
+	return true;
+}
+
+bool DBStatement::BindParamInt32(SQLUSMALLINT ParamIndex, int32* ValuePtr)
+{
+	if (Hstmt == SQL_NULL_HSTMT || ValuePtr == nullptr)
+		return false;
+
+	// SQL_C_SLONG ↔ SQL_INTEGER. NOT NULL 가정이라 StrLen_or_Ind 는 nullptr.
+	const SQLRETURN Ret = ::SQLBindParameter(
+		Hstmt, ParamIndex, SQL_PARAM_INPUT,
+		SQL_C_SLONG, SQL_INTEGER, 0, 0,
+		ValuePtr, 0, nullptr);
+	if (SQL_SUCCEEDED(Ret) == false)
+	{
+		DBConnection::HandleError(Hstmt, SQL_HANDLE_STMT, L"SQLBindParameter(INT32)");
+		return false;
+	}
+	return true;
+}
+
+bool DBStatement::BindParamInt64(SQLUSMALLINT ParamIndex, int64* ValuePtr)
+{
+	if (Hstmt == SQL_NULL_HSTMT || ValuePtr == nullptr)
+		return false;
+
+	// SQL_C_SBIGINT ↔ SQL_BIGINT. ColumnSize=19 가 SQL Server 가이드 값이지만 0 으로도 드라이버가 추정한다.
+	const SQLRETURN Ret = ::SQLBindParameter(
+		Hstmt, ParamIndex, SQL_PARAM_INPUT,
+		SQL_C_SBIGINT, SQL_BIGINT, 0, 0,
+		ValuePtr, 0, nullptr);
+	if (SQL_SUCCEEDED(Ret) == false)
+	{
+		DBConnection::HandleError(Hstmt, SQL_HANDLE_STMT, L"SQLBindParameter(INT64)");
+		return false;
+	}
+	return true;
+}
+
+bool DBStatement::BindParamFloat(SQLUSMALLINT ParamIndex, float* ValuePtr)
+{
+	if (Hstmt == SQL_NULL_HSTMT || ValuePtr == nullptr)
+		return false;
+
+	// SQL_C_FLOAT ↔ SQL_REAL. 4-byte single-precision, TileMoveSpeed 용.
+	const SQLRETURN Ret = ::SQLBindParameter(
+		Hstmt, ParamIndex, SQL_PARAM_INPUT,
+		SQL_C_FLOAT, SQL_REAL, 0, 0,
+		ValuePtr, 0, nullptr);
+	if (SQL_SUCCEEDED(Ret) == false)
+	{
+		DBConnection::HandleError(Hstmt, SQL_HANDLE_STMT, L"SQLBindParameter(FLOAT)");
+		return false;
+	}
+	return true;
+}
+
+bool DBStatement::BindColInt32(SQLUSMALLINT ColumnIndex, int32* OutPtr)
+{
+	if (Hstmt == SQL_NULL_HSTMT || OutPtr == nullptr)
+		return false;
+
+	const SQLRETURN Ret = ::SQLBindCol(Hstmt, ColumnIndex, SQL_C_SLONG, OutPtr, sizeof(int32), nullptr);
+	if (SQL_SUCCEEDED(Ret) == false)
+	{
+		DBConnection::HandleError(Hstmt, SQL_HANDLE_STMT, L"SQLBindCol(INT32)");
+		return false;
+	}
+	return true;
+}
+
+bool DBStatement::BindColInt64(SQLUSMALLINT ColumnIndex, int64* OutPtr)
+{
+	if (Hstmt == SQL_NULL_HSTMT || OutPtr == nullptr)
+		return false;
+
+	const SQLRETURN Ret = ::SQLBindCol(Hstmt, ColumnIndex, SQL_C_SBIGINT, OutPtr, sizeof(int64), nullptr);
+	if (SQL_SUCCEEDED(Ret) == false)
+	{
+		DBConnection::HandleError(Hstmt, SQL_HANDLE_STMT, L"SQLBindCol(INT64)");
+		return false;
+	}
+	return true;
+}
+
+bool DBStatement::BindColFloat(SQLUSMALLINT ColumnIndex, float* OutPtr)
+{
+	if (Hstmt == SQL_NULL_HSTMT || OutPtr == nullptr)
+		return false;
+
+	const SQLRETURN Ret = ::SQLBindCol(Hstmt, ColumnIndex, SQL_C_FLOAT, OutPtr, sizeof(float), nullptr);
+	if (SQL_SUCCEEDED(Ret) == false)
+	{
+		DBConnection::HandleError(Hstmt, SQL_HANDLE_STMT, L"SQLBindCol(FLOAT)");
+		return false;
+	}
 	return true;
 }
