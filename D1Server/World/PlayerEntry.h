@@ -4,6 +4,9 @@
 #include "DB/DBMeta.h"
 #include "Protocol.pb.h"
 
+#include <sql.h>
+#include <sqlext.h>
+
 #include <memory>
 
 class GameServerSession;
@@ -52,6 +55,27 @@ struct PlayerEntry
 	 */
 	float TileMoveSpeed = 6.0f;
 
+	// [M5 신규 영속 필드 — 풀세트 5종 검증용] ----------------------------------
+
+	/** 닉네임. NVARCHAR(32) NULL — wchar_t[33] = 32 글자 + null term. */
+	wchar_t NickName[33] = {};
+	/** NickName 의 indicator. 기본 SQL_NULL_DATA — set 안 하면 NULL 저장. */
+	SQLLEN NickName_Ind = SQL_NULL_DATA;
+
+	/** 관리자 여부. BIT NOT NULL — SQL_C_BIT 가 unsigned char 0/1 요구. */
+	uint8 IsAdmin = 0;
+
+	/** 마지막 접속. DATETIME2(3) NULL — ms 단위 정밀도. */
+	SQL_TIMESTAMP_STRUCT LastLoginAt = {};
+	SQLLEN LastLoginAt_Ind = SQL_NULL_DATA;
+
+	/** 평판 점수. SMALLINT NOT NULL — int16 음수 가능. */
+	int16 Reputation = 0;
+
+	/** 아바타 해시. VARBINARY(32) NULL — 32-byte 고정 폭. */
+	uint8 AvatarHash[32] = {};
+	SQLLEN AvatarHash_Ind = SQL_NULL_DATA;
+
 	// [런타임 전용, DB 매핑 제외] ----------------------------------------------
 	// 아래 필드들은 DB_REGISTER_TABLE 블록에 등록되지 않으므로 TableMetadata::Columns 에 들어가지 않는다.
 	// 매크로 "등록 안 하면 자연 제외" 규칙이 이 섹션의 존재 이유.
@@ -93,4 +117,9 @@ DB_REGISTER_TABLE_BEGIN(PlayerEntry, "dbo.PlayerEntry")
 	DB_COLUMN(MaxHP, INT)
 	DB_COLUMN(AttackDamage, INT)
 	DB_COLUMN(TileMoveSpeed, REAL)
+	DB_COLUMN_NULL(NickName, NVARCHAR(32))
+	DB_COLUMN(IsAdmin, BIT)
+	DB_COLUMN_NULL(LastLoginAt, DATETIME2(3))
+	DB_COLUMN(Reputation, SMALLINT)
+	DB_COLUMN_NULL(AvatarHash, VARBINARY(32))
 DB_REGISTER_TABLE_END()

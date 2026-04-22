@@ -167,16 +167,19 @@ bool DBStatement::GetColumnFloat(SQLUSMALLINT ColumnIndex, float& OutValue)
 	return true;
 }
 
-bool DBStatement::BindParamInt32(SQLUSMALLINT ParamIndex, int32* ValuePtr)
+// ============================================================
+// BindParam — 입력 바인딩 (write 경로)
+// ============================================================
+
+bool DBStatement::BindParamInt32(SQLUSMALLINT ParamIndex, int32* ValuePtr, SQLLEN* IndicatorPtr)
 {
 	if (Hstmt == SQL_NULL_HSTMT || ValuePtr == nullptr)
 		return false;
 
-	// SQL_C_SLONG ↔ SQL_INTEGER. NOT NULL 가정이라 StrLen_or_Ind 는 nullptr.
 	const SQLRETURN Ret = ::SQLBindParameter(
 		Hstmt, ParamIndex, SQL_PARAM_INPUT,
 		SQL_C_SLONG, SQL_INTEGER, 0, 0,
-		ValuePtr, 0, nullptr);
+		ValuePtr, 0, IndicatorPtr);
 	if (SQL_SUCCEEDED(Ret) == false)
 	{
 		DBConnection::HandleError(Hstmt, SQL_HANDLE_STMT, L"SQLBindParameter(INT32)");
@@ -185,16 +188,15 @@ bool DBStatement::BindParamInt32(SQLUSMALLINT ParamIndex, int32* ValuePtr)
 	return true;
 }
 
-bool DBStatement::BindParamInt64(SQLUSMALLINT ParamIndex, int64* ValuePtr)
+bool DBStatement::BindParamInt64(SQLUSMALLINT ParamIndex, int64* ValuePtr, SQLLEN* IndicatorPtr)
 {
 	if (Hstmt == SQL_NULL_HSTMT || ValuePtr == nullptr)
 		return false;
 
-	// SQL_C_SBIGINT ↔ SQL_BIGINT. ColumnSize=19 가 SQL Server 가이드 값이지만 0 으로도 드라이버가 추정한다.
 	const SQLRETURN Ret = ::SQLBindParameter(
 		Hstmt, ParamIndex, SQL_PARAM_INPUT,
 		SQL_C_SBIGINT, SQL_BIGINT, 0, 0,
-		ValuePtr, 0, nullptr);
+		ValuePtr, 0, IndicatorPtr);
 	if (SQL_SUCCEEDED(Ret) == false)
 	{
 		DBConnection::HandleError(Hstmt, SQL_HANDLE_STMT, L"SQLBindParameter(INT64)");
@@ -203,16 +205,49 @@ bool DBStatement::BindParamInt64(SQLUSMALLINT ParamIndex, int64* ValuePtr)
 	return true;
 }
 
-bool DBStatement::BindParamFloat(SQLUSMALLINT ParamIndex, float* ValuePtr)
+bool DBStatement::BindParamInt16(SQLUSMALLINT ParamIndex, int16* ValuePtr, SQLLEN* IndicatorPtr)
 {
 	if (Hstmt == SQL_NULL_HSTMT || ValuePtr == nullptr)
 		return false;
 
-	// SQL_C_FLOAT ↔ SQL_REAL. 4-byte single-precision, TileMoveSpeed 용.
+	const SQLRETURN Ret = ::SQLBindParameter(
+		Hstmt, ParamIndex, SQL_PARAM_INPUT,
+		SQL_C_SSHORT, SQL_SMALLINT, 0, 0,
+		ValuePtr, 0, IndicatorPtr);
+	if (SQL_SUCCEEDED(Ret) == false)
+	{
+		DBConnection::HandleError(Hstmt, SQL_HANDLE_STMT, L"SQLBindParameter(INT16)");
+		return false;
+	}
+	return true;
+}
+
+bool DBStatement::BindParamUInt8(SQLUSMALLINT ParamIndex, uint8* ValuePtr, SQLLEN* IndicatorPtr)
+{
+	if (Hstmt == SQL_NULL_HSTMT || ValuePtr == nullptr)
+		return false;
+
+	const SQLRETURN Ret = ::SQLBindParameter(
+		Hstmt, ParamIndex, SQL_PARAM_INPUT,
+		SQL_C_UTINYINT, SQL_TINYINT, 0, 0,
+		ValuePtr, 0, IndicatorPtr);
+	if (SQL_SUCCEEDED(Ret) == false)
+	{
+		DBConnection::HandleError(Hstmt, SQL_HANDLE_STMT, L"SQLBindParameter(TINYINT)");
+		return false;
+	}
+	return true;
+}
+
+bool DBStatement::BindParamFloat(SQLUSMALLINT ParamIndex, float* ValuePtr, SQLLEN* IndicatorPtr)
+{
+	if (Hstmt == SQL_NULL_HSTMT || ValuePtr == nullptr)
+		return false;
+
 	const SQLRETURN Ret = ::SQLBindParameter(
 		Hstmt, ParamIndex, SQL_PARAM_INPUT,
 		SQL_C_FLOAT, SQL_REAL, 0, 0,
-		ValuePtr, 0, nullptr);
+		ValuePtr, 0, IndicatorPtr);
 	if (SQL_SUCCEEDED(Ret) == false)
 	{
 		DBConnection::HandleError(Hstmt, SQL_HANDLE_STMT, L"SQLBindParameter(FLOAT)");
@@ -221,12 +256,150 @@ bool DBStatement::BindParamFloat(SQLUSMALLINT ParamIndex, float* ValuePtr)
 	return true;
 }
 
-bool DBStatement::BindColInt32(SQLUSMALLINT ColumnIndex, int32* OutPtr)
+bool DBStatement::BindParamDouble(SQLUSMALLINT ParamIndex, double* ValuePtr, SQLLEN* IndicatorPtr)
+{
+	if (Hstmt == SQL_NULL_HSTMT || ValuePtr == nullptr)
+		return false;
+
+	const SQLRETURN Ret = ::SQLBindParameter(
+		Hstmt, ParamIndex, SQL_PARAM_INPUT,
+		SQL_C_DOUBLE, SQL_DOUBLE, 0, 0,
+		ValuePtr, 0, IndicatorPtr);
+	if (SQL_SUCCEEDED(Ret) == false)
+	{
+		DBConnection::HandleError(Hstmt, SQL_HANDLE_STMT, L"SQLBindParameter(DOUBLE)");
+		return false;
+	}
+	return true;
+}
+
+bool DBStatement::BindParamBit(SQLUSMALLINT ParamIndex, uint8* ValuePtr, SQLLEN* IndicatorPtr)
+{
+	if (Hstmt == SQL_NULL_HSTMT || ValuePtr == nullptr)
+		return false;
+
+	const SQLRETURN Ret = ::SQLBindParameter(
+		Hstmt, ParamIndex, SQL_PARAM_INPUT,
+		SQL_C_BIT, SQL_BIT, 0, 0,
+		ValuePtr, 0, IndicatorPtr);
+	if (SQL_SUCCEEDED(Ret) == false)
+	{
+		DBConnection::HandleError(Hstmt, SQL_HANDLE_STMT, L"SQLBindParameter(BIT)");
+		return false;
+	}
+	return true;
+}
+
+bool DBStatement::BindParamDate(SQLUSMALLINT ParamIndex, SQL_DATE_STRUCT* ValuePtr, SQLLEN* IndicatorPtr)
+{
+	if (Hstmt == SQL_NULL_HSTMT || ValuePtr == nullptr)
+		return false;
+
+	const SQLRETURN Ret = ::SQLBindParameter(
+		Hstmt, ParamIndex, SQL_PARAM_INPUT,
+		SQL_C_TYPE_DATE, SQL_TYPE_DATE, 10, 0,
+		ValuePtr, 0, IndicatorPtr);
+	if (SQL_SUCCEEDED(Ret) == false)
+	{
+		DBConnection::HandleError(Hstmt, SQL_HANDLE_STMT, L"SQLBindParameter(DATE)");
+		return false;
+	}
+	return true;
+}
+
+bool DBStatement::BindParamTimestamp(SQLUSMALLINT ParamIndex, SQL_TIMESTAMP_STRUCT* ValuePtr,
+                                     uint8 Precision, SQLLEN* IndicatorPtr)
+{
+	if (Hstmt == SQL_NULL_HSTMT || ValuePtr == nullptr)
+		return false;
+
+	// DATETIME2(p) ColumnSize 는 ODBC 표준 공식: p == 0 ? 19 : 20 + p
+	// 예: DATETIME2(3) → "2026-04-22 12:34:56.789" = 23 글자
+	const SQLULEN ColumnSize = (Precision == 0) ? 19 : (20u + Precision);
+	const SQLRETURN Ret = ::SQLBindParameter(
+		Hstmt, ParamIndex, SQL_PARAM_INPUT,
+		SQL_C_TYPE_TIMESTAMP, SQL_TYPE_TIMESTAMP,
+		ColumnSize, Precision,
+		ValuePtr, 0, IndicatorPtr);
+	if (SQL_SUCCEEDED(Ret) == false)
+	{
+		DBConnection::HandleError(Hstmt, SQL_HANDLE_STMT, L"SQLBindParameter(TIMESTAMP)");
+		return false;
+	}
+	return true;
+}
+
+bool DBStatement::BindParamWChar(SQLUSMALLINT ParamIndex, wchar_t* ValuePtr,
+                                 SQLLEN BufferLengthBytes, SQLLEN ColumnSizeChars,
+                                 SQLLEN* IndicatorPtr)
+{
+	if (Hstmt == SQL_NULL_HSTMT || ValuePtr == nullptr)
+		return false;
+
+	// SQL_C_WCHAR ↔ SQL_WVARCHAR. ColumnSize = SQL 측 글자 수 (NVARCHAR(N) 의 N), BufferLength = C 버퍼 byte.
+	const SQLRETURN Ret = ::SQLBindParameter(
+		Hstmt, ParamIndex, SQL_PARAM_INPUT,
+		SQL_C_WCHAR, SQL_WVARCHAR,
+		static_cast<SQLULEN>(ColumnSizeChars), 0,
+		ValuePtr, BufferLengthBytes, IndicatorPtr);
+	if (SQL_SUCCEEDED(Ret) == false)
+	{
+		DBConnection::HandleError(Hstmt, SQL_HANDLE_STMT, L"SQLBindParameter(WCHAR)");
+		return false;
+	}
+	return true;
+}
+
+bool DBStatement::BindParamChar(SQLUSMALLINT ParamIndex, char* ValuePtr,
+                                SQLLEN BufferLengthBytes, SQLLEN ColumnSizeBytes,
+                                SQLLEN* IndicatorPtr)
+{
+	if (Hstmt == SQL_NULL_HSTMT || ValuePtr == nullptr)
+		return false;
+
+	const SQLRETURN Ret = ::SQLBindParameter(
+		Hstmt, ParamIndex, SQL_PARAM_INPUT,
+		SQL_C_CHAR, SQL_VARCHAR,
+		static_cast<SQLULEN>(ColumnSizeBytes), 0,
+		ValuePtr, BufferLengthBytes, IndicatorPtr);
+	if (SQL_SUCCEEDED(Ret) == false)
+	{
+		DBConnection::HandleError(Hstmt, SQL_HANDLE_STMT, L"SQLBindParameter(CHAR)");
+		return false;
+	}
+	return true;
+}
+
+bool DBStatement::BindParamBinary(SQLUSMALLINT ParamIndex, uint8* ValuePtr,
+                                  SQLLEN BufferLengthBytes, SQLLEN ColumnSizeBytes,
+                                  SQLLEN* IndicatorPtr)
+{
+	if (Hstmt == SQL_NULL_HSTMT || ValuePtr == nullptr)
+		return false;
+
+	const SQLRETURN Ret = ::SQLBindParameter(
+		Hstmt, ParamIndex, SQL_PARAM_INPUT,
+		SQL_C_BINARY, SQL_VARBINARY,
+		static_cast<SQLULEN>(ColumnSizeBytes), 0,
+		ValuePtr, BufferLengthBytes, IndicatorPtr);
+	if (SQL_SUCCEEDED(Ret) == false)
+	{
+		DBConnection::HandleError(Hstmt, SQL_HANDLE_STMT, L"SQLBindParameter(BINARY)");
+		return false;
+	}
+	return true;
+}
+
+// ============================================================
+// BindCol — 출력 바인딩 (read 경로)
+// ============================================================
+
+bool DBStatement::BindColInt32(SQLUSMALLINT ColumnIndex, int32* OutPtr, SQLLEN* IndicatorPtr)
 {
 	if (Hstmt == SQL_NULL_HSTMT || OutPtr == nullptr)
 		return false;
 
-	const SQLRETURN Ret = ::SQLBindCol(Hstmt, ColumnIndex, SQL_C_SLONG, OutPtr, sizeof(int32), nullptr);
+	const SQLRETURN Ret = ::SQLBindCol(Hstmt, ColumnIndex, SQL_C_SLONG, OutPtr, sizeof(int32), IndicatorPtr);
 	if (SQL_SUCCEEDED(Ret) == false)
 	{
 		DBConnection::HandleError(Hstmt, SQL_HANDLE_STMT, L"SQLBindCol(INT32)");
@@ -235,12 +408,12 @@ bool DBStatement::BindColInt32(SQLUSMALLINT ColumnIndex, int32* OutPtr)
 	return true;
 }
 
-bool DBStatement::BindColInt64(SQLUSMALLINT ColumnIndex, int64* OutPtr)
+bool DBStatement::BindColInt64(SQLUSMALLINT ColumnIndex, int64* OutPtr, SQLLEN* IndicatorPtr)
 {
 	if (Hstmt == SQL_NULL_HSTMT || OutPtr == nullptr)
 		return false;
 
-	const SQLRETURN Ret = ::SQLBindCol(Hstmt, ColumnIndex, SQL_C_SBIGINT, OutPtr, sizeof(int64), nullptr);
+	const SQLRETURN Ret = ::SQLBindCol(Hstmt, ColumnIndex, SQL_C_SBIGINT, OutPtr, sizeof(int64), IndicatorPtr);
 	if (SQL_SUCCEEDED(Ret) == false)
 	{
 		DBConnection::HandleError(Hstmt, SQL_HANDLE_STMT, L"SQLBindCol(INT64)");
@@ -249,15 +422,144 @@ bool DBStatement::BindColInt64(SQLUSMALLINT ColumnIndex, int64* OutPtr)
 	return true;
 }
 
-bool DBStatement::BindColFloat(SQLUSMALLINT ColumnIndex, float* OutPtr)
+bool DBStatement::BindColInt16(SQLUSMALLINT ColumnIndex, int16* OutPtr, SQLLEN* IndicatorPtr)
 {
 	if (Hstmt == SQL_NULL_HSTMT || OutPtr == nullptr)
 		return false;
 
-	const SQLRETURN Ret = ::SQLBindCol(Hstmt, ColumnIndex, SQL_C_FLOAT, OutPtr, sizeof(float), nullptr);
+	const SQLRETURN Ret = ::SQLBindCol(Hstmt, ColumnIndex, SQL_C_SSHORT, OutPtr, sizeof(int16), IndicatorPtr);
+	if (SQL_SUCCEEDED(Ret) == false)
+	{
+		DBConnection::HandleError(Hstmt, SQL_HANDLE_STMT, L"SQLBindCol(INT16)");
+		return false;
+	}
+	return true;
+}
+
+bool DBStatement::BindColUInt8(SQLUSMALLINT ColumnIndex, uint8* OutPtr, SQLLEN* IndicatorPtr)
+{
+	if (Hstmt == SQL_NULL_HSTMT || OutPtr == nullptr)
+		return false;
+
+	const SQLRETURN Ret = ::SQLBindCol(Hstmt, ColumnIndex, SQL_C_UTINYINT, OutPtr, sizeof(uint8), IndicatorPtr);
+	if (SQL_SUCCEEDED(Ret) == false)
+	{
+		DBConnection::HandleError(Hstmt, SQL_HANDLE_STMT, L"SQLBindCol(TINYINT)");
+		return false;
+	}
+	return true;
+}
+
+bool DBStatement::BindColFloat(SQLUSMALLINT ColumnIndex, float* OutPtr, SQLLEN* IndicatorPtr)
+{
+	if (Hstmt == SQL_NULL_HSTMT || OutPtr == nullptr)
+		return false;
+
+	const SQLRETURN Ret = ::SQLBindCol(Hstmt, ColumnIndex, SQL_C_FLOAT, OutPtr, sizeof(float), IndicatorPtr);
 	if (SQL_SUCCEEDED(Ret) == false)
 	{
 		DBConnection::HandleError(Hstmt, SQL_HANDLE_STMT, L"SQLBindCol(FLOAT)");
+		return false;
+	}
+	return true;
+}
+
+bool DBStatement::BindColDouble(SQLUSMALLINT ColumnIndex, double* OutPtr, SQLLEN* IndicatorPtr)
+{
+	if (Hstmt == SQL_NULL_HSTMT || OutPtr == nullptr)
+		return false;
+
+	const SQLRETURN Ret = ::SQLBindCol(Hstmt, ColumnIndex, SQL_C_DOUBLE, OutPtr, sizeof(double), IndicatorPtr);
+	if (SQL_SUCCEEDED(Ret) == false)
+	{
+		DBConnection::HandleError(Hstmt, SQL_HANDLE_STMT, L"SQLBindCol(DOUBLE)");
+		return false;
+	}
+	return true;
+}
+
+bool DBStatement::BindColBit(SQLUSMALLINT ColumnIndex, uint8* OutPtr, SQLLEN* IndicatorPtr)
+{
+	if (Hstmt == SQL_NULL_HSTMT || OutPtr == nullptr)
+		return false;
+
+	const SQLRETURN Ret = ::SQLBindCol(Hstmt, ColumnIndex, SQL_C_BIT, OutPtr, sizeof(uint8), IndicatorPtr);
+	if (SQL_SUCCEEDED(Ret) == false)
+	{
+		DBConnection::HandleError(Hstmt, SQL_HANDLE_STMT, L"SQLBindCol(BIT)");
+		return false;
+	}
+	return true;
+}
+
+bool DBStatement::BindColDate(SQLUSMALLINT ColumnIndex, SQL_DATE_STRUCT* OutPtr, SQLLEN* IndicatorPtr)
+{
+	if (Hstmt == SQL_NULL_HSTMT || OutPtr == nullptr)
+		return false;
+
+	const SQLRETURN Ret = ::SQLBindCol(Hstmt, ColumnIndex, SQL_C_TYPE_DATE, OutPtr, sizeof(SQL_DATE_STRUCT), IndicatorPtr);
+	if (SQL_SUCCEEDED(Ret) == false)
+	{
+		DBConnection::HandleError(Hstmt, SQL_HANDLE_STMT, L"SQLBindCol(DATE)");
+		return false;
+	}
+	return true;
+}
+
+bool DBStatement::BindColTimestamp(SQLUSMALLINT ColumnIndex, SQL_TIMESTAMP_STRUCT* OutPtr, SQLLEN* IndicatorPtr)
+{
+	if (Hstmt == SQL_NULL_HSTMT || OutPtr == nullptr)
+		return false;
+
+	const SQLRETURN Ret = ::SQLBindCol(Hstmt, ColumnIndex, SQL_C_TYPE_TIMESTAMP, OutPtr, sizeof(SQL_TIMESTAMP_STRUCT), IndicatorPtr);
+	if (SQL_SUCCEEDED(Ret) == false)
+	{
+		DBConnection::HandleError(Hstmt, SQL_HANDLE_STMT, L"SQLBindCol(TIMESTAMP)");
+		return false;
+	}
+	return true;
+}
+
+bool DBStatement::BindColWChar(SQLUSMALLINT ColumnIndex, wchar_t* OutPtr,
+                               SQLLEN BufferLengthBytes, SQLLEN* IndicatorPtr)
+{
+	if (Hstmt == SQL_NULL_HSTMT || OutPtr == nullptr)
+		return false;
+
+	const SQLRETURN Ret = ::SQLBindCol(Hstmt, ColumnIndex, SQL_C_WCHAR, OutPtr, BufferLengthBytes, IndicatorPtr);
+	if (SQL_SUCCEEDED(Ret) == false)
+	{
+		DBConnection::HandleError(Hstmt, SQL_HANDLE_STMT, L"SQLBindCol(WCHAR)");
+		return false;
+	}
+	return true;
+}
+
+bool DBStatement::BindColChar(SQLUSMALLINT ColumnIndex, char* OutPtr,
+                              SQLLEN BufferLengthBytes, SQLLEN* IndicatorPtr)
+{
+	if (Hstmt == SQL_NULL_HSTMT || OutPtr == nullptr)
+		return false;
+
+	const SQLRETURN Ret = ::SQLBindCol(Hstmt, ColumnIndex, SQL_C_CHAR, OutPtr, BufferLengthBytes, IndicatorPtr);
+	if (SQL_SUCCEEDED(Ret) == false)
+	{
+		DBConnection::HandleError(Hstmt, SQL_HANDLE_STMT, L"SQLBindCol(CHAR)");
+		return false;
+	}
+	return true;
+}
+
+bool DBStatement::BindColBinary(SQLUSMALLINT ColumnIndex, uint8* OutPtr,
+                                SQLLEN BufferLengthBytes, SQLLEN* IndicatorPtr)
+{
+	if (Hstmt == SQL_NULL_HSTMT || OutPtr == nullptr)
+		return false;
+
+	const SQLRETURN Ret = ::SQLBindCol(Hstmt, ColumnIndex, SQL_C_BINARY, OutPtr, BufferLengthBytes, IndicatorPtr);
+	if (SQL_SUCCEEDED(Ret) == false)
+	{
+		DBConnection::HandleError(Hstmt, SQL_HANDLE_STMT, L"SQLBindCol(BINARY)");
 		return false;
 	}
 	return true;

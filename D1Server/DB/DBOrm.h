@@ -44,23 +44,46 @@ namespace DBOrmDetail
 {
 	/**
 	 * ColumnMeta::CType 디스패치 — RowBase + Offset 위치를 ParamIndex(1-based) 슬롯에
-	 * SQLBindParameter 로 바인딩. INT/BIGINT/REAL 만 지원(M3 범위 유지).
+	 * SQLBindParameter 로 바인딩. M5 풀세트 12종 지원.
 	 *
 	 * RowBase 는 non-const void* — SQLBindParameter 가 input 에도 non-const 를 요구하기 때문.
 	 * 호출부는 const T& Row 로 받은 뒤 const_cast<void*>(static_cast<const void*>(&Row)) 로 진입.
+	 *
+	 * NULL 가능 컬럼은 RowBase + Col.IndicatorOffset 슬롯의 SQLLEN* 를 indicator 로 전달.
+	 * NOT NULL 은 nullptr — 단 가변 길이 NOT NULL 컬럼은 별도 처리 필요 (현 마일스톤 범위 밖).
 	 */
 	inline bool BindParamFromMeta(DBStatement& Stmt, SQLUSMALLINT ParamIndex, const ColumnMeta& Col, void* RowBase)
 	{
 		char* Src = static_cast<char*>(RowBase) + Col.Offset;
+		SQLLEN* Ind = Col.bNullable	? reinterpret_cast<SQLLEN*>(static_cast<char*>(RowBase) + Col.IndicatorOffset) : nullptr;
+
 		switch (Col.CType)
 		{
 			case ESqlCType::SBigInt:
-				return Stmt.BindParamInt64(ParamIndex, reinterpret_cast<int64*>(Src));
+				return Stmt.BindParamInt64(ParamIndex, reinterpret_cast<int64*>(Src), Ind);
 			case ESqlCType::SLong:
 				// enum (예: Protocol::CharacterType) 도 sizeof == 4 가정으로 동일 슬롯에 직결된다.
-				return Stmt.BindParamInt32(ParamIndex, reinterpret_cast<int32*>(Src));
+				return Stmt.BindParamInt32(ParamIndex, reinterpret_cast<int32*>(Src), Ind);
+			case ESqlCType::SShort:
+				return Stmt.BindParamInt16(ParamIndex, reinterpret_cast<int16*>(Src), Ind);
+			case ESqlCType::UTinyInt:
+				return Stmt.BindParamUInt8(ParamIndex, reinterpret_cast<uint8*>(Src), Ind);
 			case ESqlCType::Float:
-				return Stmt.BindParamFloat(ParamIndex, reinterpret_cast<float*>(Src));
+				return Stmt.BindParamFloat(ParamIndex, reinterpret_cast<float*>(Src), Ind);
+			case ESqlCType::Double:
+				return Stmt.BindParamDouble(ParamIndex, reinterpret_cast<double*>(Src), Ind);
+			case ESqlCType::Bit:
+				return Stmt.BindParamBit(ParamIndex, reinterpret_cast<uint8*>(Src), Ind);
+			case ESqlCType::WChar:
+				return Stmt.BindParamWChar(ParamIndex, reinterpret_cast<wchar_t*>(Src), static_cast<SQLLEN>(Col.Size), static_cast<SQLLEN>(Col.Length), Ind);
+			case ESqlCType::Char:
+				return Stmt.BindParamChar(ParamIndex, Src, static_cast<SQLLEN>(Col.Size), static_cast<SQLLEN>(Col.Length), Ind);
+			case ESqlCType::Date:
+				return Stmt.BindParamDate(ParamIndex, reinterpret_cast<SQL_DATE_STRUCT*>(Src), Ind);
+			case ESqlCType::Timestamp:
+				return Stmt.BindParamTimestamp(ParamIndex, reinterpret_cast<SQL_TIMESTAMP_STRUCT*>(Src), Col.Precision, Ind);
+			case ESqlCType::Binary:
+				return Stmt.BindParamBinary(ParamIndex, reinterpret_cast<uint8*>(Src), static_cast<SQLLEN>(Col.Size), static_cast<SQLLEN>(Col.Length), Ind);
 		}
 		return false;
 	}
@@ -68,18 +91,41 @@ namespace DBOrmDetail
 	/**
 	 * ColumnMeta::CType 디스패치 — RowBase + Offset 위치를 ColumnIndex(1-based) 슬롯에
 	 * SQLBindCol 로 바인딩. Fetch 한 번에 모든 바인딩된 메모리에 값이 한꺼번에 기록된다.
+	 *
+	 * NULL 가능 컬럼은 ODBC 가 RowBase + Col.IndicatorOffset 의 SQLLEN 슬롯에 SQL_NULL_DATA
+	 * 또는 실제 byte 길이를 기록해 호출자가 NULL 판별을 할 수 있게 한다.
 	 */
 	inline bool BindColFromMeta(DBStatement& Stmt, SQLUSMALLINT ColumnIndex, const ColumnMeta& Col, void* RowBase)
 	{
 		char* Dst = static_cast<char*>(RowBase) + Col.Offset;
+		SQLLEN* Ind = Col.bNullable ? reinterpret_cast<SQLLEN*>(static_cast<char*>(RowBase) + Col.IndicatorOffset) : nullptr;
+
 		switch (Col.CType)
 		{
 			case ESqlCType::SBigInt:
-				return Stmt.BindColInt64(ColumnIndex, reinterpret_cast<int64*>(Dst));
+				return Stmt.BindColInt64(ColumnIndex, reinterpret_cast<int64*>(Dst), Ind);
 			case ESqlCType::SLong:
-				return Stmt.BindColInt32(ColumnIndex, reinterpret_cast<int32*>(Dst));
+				return Stmt.BindColInt32(ColumnIndex, reinterpret_cast<int32*>(Dst), Ind);
+			case ESqlCType::SShort:
+				return Stmt.BindColInt16(ColumnIndex, reinterpret_cast<int16*>(Dst), Ind);
+			case ESqlCType::UTinyInt:
+				return Stmt.BindColUInt8(ColumnIndex, reinterpret_cast<uint8*>(Dst), Ind);
 			case ESqlCType::Float:
-				return Stmt.BindColFloat(ColumnIndex, reinterpret_cast<float*>(Dst));
+				return Stmt.BindColFloat(ColumnIndex, reinterpret_cast<float*>(Dst), Ind);
+			case ESqlCType::Double:
+				return Stmt.BindColDouble(ColumnIndex, reinterpret_cast<double*>(Dst), Ind);
+			case ESqlCType::Bit:
+				return Stmt.BindColBit(ColumnIndex, reinterpret_cast<uint8*>(Dst), Ind);
+			case ESqlCType::WChar:
+				return Stmt.BindColWChar(ColumnIndex, reinterpret_cast<wchar_t*>(Dst), static_cast<SQLLEN>(Col.Size), Ind);
+			case ESqlCType::Char:
+				return Stmt.BindColChar(ColumnIndex, Dst, static_cast<SQLLEN>(Col.Size), Ind);
+			case ESqlCType::Date:
+				return Stmt.BindColDate(ColumnIndex, reinterpret_cast<SQL_DATE_STRUCT*>(Dst), Ind);
+			case ESqlCType::Timestamp:
+				return Stmt.BindColTimestamp(ColumnIndex, reinterpret_cast<SQL_TIMESTAMP_STRUCT*>(Dst), Ind);
+			case ESqlCType::Binary:
+				return Stmt.BindColBinary(ColumnIndex, reinterpret_cast<uint8*>(Dst), static_cast<SQLLEN>(Col.Size), Ind);
 		}
 		return false;
 	}

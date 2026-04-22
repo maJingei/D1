@@ -32,5 +32,21 @@ CREATE TABLE dbo.PlayerEntry
     AttackDamage INT NOT NULL,
 
     -- 타일/초 단위 이동 속도. 1칸 쿨다운(ms) = 1000 / TileMoveSpeed.
-    TileMoveSpeed REAL NOT NULL
+    TileMoveSpeed REAL NOT NULL,
+
+    -- M5 신규 도메인 컬럼 (풀세트 5종 검증) ----------------------------
+    -- 닉네임. 미설정 시 NULL — 신규 가입 직후 또는 닉네임 미지정 캐릭터.
+    NickName NVARCHAR(32) NULL,
+
+    -- 관리자 플래그. 기본 0(일반 유저). BIT 는 SQL_C_BIT 와 1:1 매핑.
+    IsAdmin BIT NOT NULL CONSTRAINT DF_PlayerEntry_IsAdmin DEFAULT 0,
+
+    -- 마지막 접속 시각. ms 정밀도(p=3). 한 번도 접속 안 했으면 NULL.
+    LastLoginAt DATETIME2(3) NULL,
+
+    -- 평판 점수. 음수 가능 (-32768 ~ 32767). 기본 0(중립).
+    Reputation SMALLINT NOT NULL CONSTRAINT DF_PlayerEntry_Reputation DEFAULT 0,
+
+    -- 아바타 이미지 해시 32-byte. 미설정 시 NULL.
+    AvatarHash VARBINARY(32) NULL
 );

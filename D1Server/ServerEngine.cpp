@@ -16,6 +16,7 @@
 #include "World/PlayerEntry.h"
 
 #include <cassert>
+#include <cstring>
 #include <iostream>
 #include <thread>
 #include <chrono>
@@ -111,10 +112,33 @@ bool ServerEngine::Init()
 
 		// 캐시 동작 임시 검증 — 같은 타입의 Set 두 번 요청 시 같은 인스턴스 반환되어야 한다.
 		// (M8 Identity Map 일관성의 전제. 본 마일스톤 한정 검증, 다음 단계에서 제거 예정)
-		[[maybe_unused]] auto& PlayersAgain = Ctx.Set<PlayerEntry>();
+		auto& PlayersAgain = Ctx.Set<PlayerEntry>();
 		assert(&Players == &PlayersAgain);
 
+		// M5 신규 5종 컬럼 라운드트립 검증용 람다. NULL/비-NULL 모두 같은 포맷으로 출력.
+		auto LogM5Cols = [](const char* Tag, const PlayerEntry& E)
+		{
+			std::cout << "[DBContext]   " << Tag
+				<< " IsAdmin=" << static_cast<int>(E.IsAdmin)
+				<< " Reputation=" << E.Reputation
+				<< " NickName_Ind=" << E.NickName_Ind
+				<< " LastLoginAt_Ind=" << E.LastLoginAt_Ind
+				<< " AvatarHash_Ind=" << E.AvatarHash_Ind;
+			if (E.LastLoginAt_Ind != SQL_NULL_DATA)
+			{
+				std::cout << " LastLoginAt=" << E.LastLoginAt.year << "-" << E.LastLoginAt.month
+					<< "-" << E.LastLoginAt.day << " " << E.LastLoginAt.hour << ":"
+					<< E.LastLoginAt.minute << ":" << E.LastLoginAt.second
+					<< "." << (E.LastLoginAt.fraction / 1000000);
+			}
+			if (E.AvatarHash_Ind != SQL_NULL_DATA)
+				std::cout << " AvatarHash[0..3]=" << static_cast<int>(E.AvatarHash[0]) << "/" << static_cast<int>(E.AvatarHash[1]) << "/" << static_cast<int>(E.AvatarHash[2]) << "/" << static_cast<int>(E.AvatarHash[3]);
+			std::cout << std::endl;
+		};
+
 		// 초기 행 템플릿. Insert 가 실패(PK 중복)해도 후속 Find/Update/Delete 는 이어간다.
+		// 새 5종 컬럼은 PlayerEntry 디폴트 그대로 — NULL 가능 셋(NickName/LastLoginAt/AvatarHash)은
+		// _Ind=SQL_NULL_DATA 라 NULL 저장, NOT NULL 둘(IsAdmin/Reputation)은 0.
 		PlayerEntry Entry;
 		Entry.PlayerID = kSmokePlayerID;
 		Entry.CharacterType = Protocol::CT_DEFAULT;
@@ -132,7 +156,7 @@ bool ServerEngine::Init()
 		else
 			std::cout << "[DBContext] Insert skipped (already exists or failed, continuing)" << std::endl;
 
-		// (2) Find #1 — Insert 성공/기존 행 둘 다 여기서 값을 확인.
+		// (2) Find #1 — Insert 성공/기존 행 둘 다 여기서 값을 확인. NULL 시나리오 검증.
 		PlayerEntry Loaded;
 		if (Players.Find(kSmokePlayerID, Loaded) == false)
 		{
@@ -144,11 +168,29 @@ bool ServerEngine::Init()
 			<< ", TileX=" << Loaded.TileX
 			<< ", TileY=" << Loaded.TileY
 			<< ", HP=" << Loaded.HP << "/" << Loaded.MaxHP << ")" << std::endl;
+		LogM5Cols("[NULL phase]", Loaded);
 
-		// (3) Update — 위치/HP 를 변경해 다음 Find 에서 관찰 가능한 차이를 만든다.
+		// (3) Update — 위치/HP + M5 신규 5종 컬럼 모두 비-NULL 값으로 set.
 		Loaded.TileX = 13;
 		Loaded.TileY = 21;
 		Loaded.HP = 9;
+
+		// 새 5종 컬럼 set (라운드트립 검증). 한국어 회피 — narrow 로그 채널 호환.
+		const wchar_t kNick[] = L"TestUser";
+		std::memcpy(Loaded.NickName, kNick, sizeof(kNick));
+		Loaded.NickName_Ind = SQL_NTS;
+
+		Loaded.IsAdmin = 1;
+
+		// 고정 datetime — 매번 같은 값이라 라운드트립 비교가 쉽다.
+		Loaded.LastLoginAt = SQL_TIMESTAMP_STRUCT{2026, 4, 22, 12, 34, 56, 789000000};
+		Loaded.LastLoginAt_Ind = sizeof(SQL_TIMESTAMP_STRUCT);
+
+		Loaded.Reputation = -42;
+
+		std::memset(Loaded.AvatarHash, 0xAA, sizeof(Loaded.AvatarHash));
+		Loaded.AvatarHash_Ind = sizeof(Loaded.AvatarHash);
+
 		if (Players.Update(Loaded) == false)
 		{
 			std::cout << "[DBContext] Update FAIL (PlayerID=" << kSmokePlayerID << ")" << std::endl;
@@ -156,7 +198,7 @@ bool ServerEngine::Init()
 		}
 		std::cout << "[DBContext] Update OK (PlayerID=" << kSmokePlayerID << ")" << std::endl;
 
-		// (4) Find #2 — Update 가 영속화되었는지 SELECT 로 재검증.
+		// (4) Find #2 — Update 가 영속화되었는지 SELECT 로 재검증. 비-NULL 시나리오.
 		PlayerEntry Reloaded;
 		if (Players.Find(kSmokePlayerID, Reloaded) == false)
 		{
@@ -168,6 +210,7 @@ bool ServerEngine::Init()
 			<< ", TileX=" << Reloaded.TileX
 			<< ", TileY=" << Reloaded.TileY
 			<< ", HP=" << Reloaded.HP << "/" << Reloaded.MaxHP << ")" << std::endl;
+		LogM5Cols("[NotNull phase]", Reloaded);
 
 		// (5) Delete — smoke 를 idempotent 하게 종료해 다음 부팅에서도 Insert 부터 다시 시작 가능하게 한다.
 		if (Players.Delete(kSmokePlayerID))
