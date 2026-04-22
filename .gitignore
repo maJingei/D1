@@ -30,7 +30,14 @@ x86/
 *.VC.db
 
 # Build outputs (custom directories)
-Libraries/
+# Libraries 안의 외부 의존성(Include/, Libs/Protobuf/) 은 추적 — git clone 후 즉시 빌드 가능하게.
+# 글로벌 *.lib / *.pdb / Debug/ / Release/ 룰의 예외를 명시.
+!Libraries/Include/
+!Libraries/Include/**
+!Libraries/Libs/Protobuf/
+!Libraries/Libs/Protobuf/**
+# Libraries 내 sln 자체 빌드 산출물(D1ServerCore 등) 은 ignore.
+Libraries/Libs/ServerCore/
 Binary/
 
 # Server runtime outputs

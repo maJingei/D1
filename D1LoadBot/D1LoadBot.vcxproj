@@ -108,7 +108,7 @@
       <AdditionalDependencies>D1ServerCore.lib;libprotobufd.lib;Synchronization.lib;ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
-      <Command>xcopy /y "$(SolutionDir)Libraries\Libs\ProtoBuf\Debug\libprotobufd.dll" "$(OutDir)"</Command>
+      <Command />
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -134,7 +134,7 @@
       <AdditionalDependencies>D1ServerCore.lib;libprotobuf.lib;Synchronization.lib;ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
-      <Command>xcopy /y "$(SolutionDir)Libraries\Libs\ProtoBuf\Release\libprotobuf.dll" "$(OutDir)"</Command>
+      <Command />
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>

@@ -127,8 +127,7 @@
       <Command>IF EXIST "$(SolutionDir)Common\protoBuf\Protocol.proto" ("$(SolutionDir)Tools\PacketGenerator\GenPacket.exe" --path "$(SolutionDir)Common\protoBuf\Protocol.proto" --output "$(ProjectDir)Network\ServerPacketHandler" --recv S_ --send C_)</Command>
     </PreBuildEvent>
     <PostBuildEvent>
-      <Command>xcopy /y "$(SolutionDir)Libraries\Libs\ProtoBuf\Debug\libprotobufd.dll" "$(OutDir)"
-xcopy /s /e /y /i "$(SolutionDir)Resource" "$(OutDir)Resource"</Command>
+      <Command>xcopy /s /e /y /i "$(SolutionDir)Resource" "$(OutDir)Resource"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -177,8 +176,7 @@ xcopy /s /e /y /i "$(SolutionDir)Resource" "$(OutDir)Resource"</Command>
       <Command>IF EXIST "$(SolutionDir)Common\protoBuf\Protocol.proto" ("$(SolutionDir)Tools\PacketGenerator\GenPacket.exe" --path "$(SolutionDir)Common\protoBuf\Protocol.proto" --output "$(ProjectDir)Network\ServerPacketHandler" --recv S_ --send C_)</Command>
     </PreBuildEvent>
     <PostBuildEvent>
-      <Command>xcopy /y "$(SolutionDir)Libraries\Libs\ProtoBuf\Release\libprotobuf.dll" "$(OutDir)"
-xcopy /s /e /y /i "$(SolutionDir)Resource" "$(OutDir)Resource"</Command>
+      <Command>xcopy /s /e /y /i "$(SolutionDir)Resource" "$(OutDir)Resource"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>

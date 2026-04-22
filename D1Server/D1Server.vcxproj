@@ -127,7 +127,7 @@
       <Command>IF EXIST "$(SolutionDir)Common\protoBuf\Protocol.proto" ("$(SolutionDir)Tools\PacketGenerator\GenPacket.exe" --path "$(SolutionDir)Common\protoBuf\Protocol.proto" --output "$(ProjectDir)Network\ClientPacketHandler" --recv C_ --send S_)</Command>
     </PreBuildEvent>
     <PostBuildEvent>
-      <Command>xcopy /y "$(SolutionDir)Libraries\Libs\ProtoBuf\Debug\libprotobufd.dll" "$(OutDir)"</Command>
+      <Command />
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -176,7 +176,7 @@
       <Command>IF EXIST "$(SolutionDir)Common\protoBuf\Protocol.proto" ("$(SolutionDir)Tools\PacketGenerator\GenPacket.exe" --path "$(SolutionDir)Common\protoBuf\Protocol.proto" --output "$(ProjectDir)Network\ClientPacketHandler" --recv C_ --send S_)</Command>
     </PreBuildEvent>
     <PostBuildEvent>
-      <Command>xcopy /y "$(SolutionDir)Libraries\Libs\ProtoBuf\Release\libprotobuf.dll" "$(OutDir)"</Command>
+      <Command />
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -185,7 +185,7 @@
     <ClInclude Include="DB\DBConnectionPool.h" />
     <ClInclude Include="DB\DBJobQueue.h" />
     <ClInclude Include="DB\DBMeta.h" />
-    <ClInclude Include="DB\DBPlayerCRUD.h" />
+    <ClInclude Include="DB\DBOrm.h" />
     <ClInclude Include="DB\DBStatement.h" />
     <ClInclude Include="GameObject\AActor.h" />
     <ClInclude Include="GameObject\AMonsterActor.h" />
@@ -204,7 +204,6 @@
     <ClCompile Include="DB\DBConnection.cpp" />
     <ClCompile Include="DB\DBConnectionPool.cpp" />
     <ClCompile Include="DB\DBJobQueue.cpp" />
-    <ClCompile Include="DB\DBPlayerCRUD.cpp" />
     <ClCompile Include="DB\DBStatement.cpp" />
     <ClCompile Include="GameObject\AMonsterActor.cpp" />
     <ClCompile Include="Network\ClientPacketHandler.cpp" />
