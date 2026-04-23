@@ -1,7 +1,10 @@
 #include "World/World.h"
 
-#include "World/Level.h"
+#include "DB/DBConnection.h"
+#include "DB/DBJobQueue.h"
+#include "DB/DBStatement.h"
 #include "Network/GameServerSession.h"
+#include "World/Level.h"
 
 #include <cassert>
 #include <iostream>
@@ -14,8 +17,6 @@ World& World::GetInstance()
 
 void World::DestroyInstance()
 {
-	// GetInstance 에서 new 로 생성한 인스턴스를 명시적으로 해제한다.
-	// 정적 포인터를 nullptr 로 밀어 이중 해제를 방지한다.
 	static World*& Ptr = reinterpret_cast<World*&>(GetInstance());
 	delete &GetInstance();
 }
@@ -27,7 +28,6 @@ bool World::Init(const std::string& ResourceBaseDir)
 	bool bAllLoaded = true;
 	for (int32 i = 0; i < LEVEL_COUNT; i++)
 	{
-		// LevelID 별로 Resource/<LevelFolders[i]>/Collision_Collision.csv 경로를 조립한다.
 		const std::string LevelCsvPath = ResourceBaseDir + LevelFolders[i] + "\\Collision_Collision.csv";
 		Levels[i] = std::make_shared<Level>();
 		Levels[i]->Init(LevelCsvPath, i, LevelPortalConfigs[i]);
@@ -56,6 +56,60 @@ void World::Destroy()
 	std::cout << "[World] Destroy\n";
 }
 
+void World::SeedNextPlayerIDFromDB()
+{
+	DBJobQueue::GetInstance().Schedule([this](DBConnection& Conn)
+	{
+		DBStatement Stmt(Conn.GetHandle());
+		if (Stmt.IsValid() == false)
+			return;
+
+		if (Stmt.ExecuteDirect(L"SELECT ISNULL(MAX(PlayerID), 0) FROM dbo.PlayerEntry;") == false)
+			return;
+
+		if (Stmt.Fetch() == false)
+			return;
+
+		int64 MaxId = 0;
+		Stmt.GetColumnInt64(1, MaxId);
+		NextPlayerID.store(static_cast<uint64>(MaxId) + 1, std::memory_order_relaxed);
+		std::cout << "[World] NextPlayerID seeded to " << (MaxId + 1) << "\n";
+	});
+}
+
+bool World::TryRegisterAccount(const std::string& AccountId, std::shared_ptr<GameServerSession> Session)
+{
+	std::lock_guard<std::mutex> Lock(AccountsMutex);
+
+	// 기존 엔트리가 살아있으면 중복 로그인으로 거절. 죽은 weak_ptr 는 청소하고 덮어씀.
+	auto It = ActiveAccounts.find(AccountId);
+	if (It != ActiveAccounts.end() && It->second.lock() != nullptr)
+		return false;
+
+	ActiveAccounts[AccountId] = Session;
+	return true;
+}
+
+void World::UnregisterAccount(const std::string& AccountId)
+{
+	std::lock_guard<std::mutex> Lock(AccountsMutex);
+	ActiveAccounts.erase(AccountId);
+}
+
+void World::EnterFromLogin(std::shared_ptr<GameServerSession> Session, PlayerEntry Entry)
+{
+	const int32 TargetLevelID = Entry.LevelID;
+	auto TargetLevel = GetLevel(TargetLevelID);
+	if (TargetLevel == nullptr)
+		return;
+
+	// 세션의 PlayerID/LevelID 선기록 — 이후 들어오는 C_MOVE/C_ATTACK 이 올바른 Level 로 라우팅.
+	Session->SetPlayerID(Entry.PlayerID);
+	Session->SetLevelID(TargetLevelID);
+
+	TargetLevel->DoAsync(&Level::DoEnterWithState, std::move(Entry), std::move(Session));
+}
+
 uint64 World::EnterAnyLevel(std::shared_ptr<GameServerSession> Session)
 {
 	const uint64 NewID = NextPlayerID.fetch_add(1, std::memory_order_relaxed);
@@ -64,8 +118,6 @@ uint64 World::EnterAnyLevel(std::shared_ptr<GameServerSession> Session)
 	Session->SetPlayerID(NewID);
 	Session->SetLevelID(LevelID);
 
-	// 최초 입장 스폰 — 해당 Level 의 CollisionMap 에서 walkable 로 precompute 된 WalkableTiles 중 PlayerID % size 로 순환 인덱싱.
-	// 포탈 전이(Level::DoPortalTransition)는 이 경로를 타지 않고 TargetSpawnTile 고정 좌표를 쓴다.
 	const std::vector<std::pair<int32, int32>>& WalkableTiles = Levels[LevelID]->WalkableTiles;
 	const size_t WalkableCount = WalkableTiles.size();
 	assert(WalkableCount > 0);

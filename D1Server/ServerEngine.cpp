@@ -97,13 +97,10 @@ bool ServerEngine::Init()
 			<< " Server=" << ServerName << std::endl;
 	});
 
-	// PlayerEntry CRUD smoke — 고정 PlayerID 로 Insert→Find→Update→Find→Delete 를 순차 실행한다.
-	//   (a) DBContext::Set<PlayerEntry>() 가 반환하는 DBSet<PlayerEntry> 의 4개 함수가 실제로
-	//       dbo.PlayerEntry 와 왕복 SQL 을 주고받는지
-	//   (b) Update 후 Find 가 갱신 값을 돌려주는지
-	//   (c) Set<T>() 를 두 번 호출하면 같은 인스턴스가 돌아오는지 (M8 Identity Map 전제)
-	// 를 로그 한 블록으로 확인. 실패해도 서버 부팅은 막지 않는다 — 진단 로그만 찍힘.
-	// dbo.PlayerEntry 테이블이 SSMS 에서 미리 생성돼 있어야 한다 (Schema/PlayerEntry.sql).
+	// M4.5 부터 실제 로그인 경로가 PlayerEntry 를 건드리므로, 고정 PlayerID=1 로 덮어쓰는 smoke 테스트는
+	// 실행 시 real account 의 행을 지워버릴 위험이 있어 주석 처리. DB 라운드트립 검증은 SELECT DB_NAME()
+	// smoke 만으로 충분.
+#if 0
 	static constexpr uint64 kSmokePlayerID = 1;
 	DBJobQueue::GetInstance().Schedule([](DBConnection& Conn)
 	{
@@ -218,6 +215,7 @@ bool ServerEngine::Init()
 		else
 			std::cout << "[DBContext] Delete FAIL (PlayerID=" << kSmokePlayerID << ")" << std::endl;
 	});
+#endif
 
 	// M4 smoke — 매크로 기반 메타데이터 / Build SQL 결과(? 플레이스홀더)를 main 스레드에서 한 번 덤프한다.
 	// DB 워커를 타지 않는 메모리 전용 결과물이므로 Schedule 없이 직접 출력.
@@ -252,6 +250,9 @@ bool ServerEngine::Init()
 
 	// World 초기화 — 각 Level 이 자신의 LevelID 에 해당하는 CollisionMap 을 로드한다.
 	World::GetInstance().Init(ResourceBaseDir);
+
+	// 재시작 후에도 PlayerID PK 충돌 없도록 DB 에서 MAX(PlayerID) 를 읽어 NextPlayerID 시딩.
+	World::GetInstance().SeedNextPlayerIDFromDB();
 
 	std::cout << "[Engine] Init\n";
 	return true;

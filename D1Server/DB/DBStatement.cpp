@@ -27,7 +27,7 @@ bool DBStatement::ExecuteDirect(const wchar_t* Sql)
 	if (Hstmt == SQL_NULL_HSTMT)
 		return false;
 
-	const SQLRETURN Ret = ::SQLExecDirectW(Hstmt, reinterpret_cast<SQLWCHAR*>(const_cast<wchar_t*>(Sql)), SQL_NTS);
+	const SQLRETURN Ret = ::SQLExecDirectW(Hstmt, (const_cast<wchar_t*>(Sql)), SQL_NTS);
 
 	// SQL_NO_DATA: UPDATE/DELETE 가 0 행을 건드린 경우. 성공으로 취급.
 	if (Ret == SQL_SUCCESS || Ret == SQL_SUCCESS_WITH_INFO || Ret == SQL_NO_DATA)
@@ -43,10 +43,26 @@ bool DBStatement::Prepare(const wchar_t* Sql)
 		return false;
 
 	// SQLPrepareW 는 드라이버에 SQL 텍스트를 등록만 한다 — 실제 전송은 SQLExecute.
-	const SQLRETURN Ret = ::SQLPrepareW(Hstmt, reinterpret_cast<SQLWCHAR*>(const_cast<wchar_t*>(Sql)), SQL_NTS);
+	const SQLRETURN Ret = ::SQLPrepareW(Hstmt, (const_cast<wchar_t*>(Sql)), SQL_NTS);
 	if (SQL_SUCCEEDED(Ret) == false)
 	{
 		DBConnection::HandleError(Hstmt, SQL_HANDLE_STMT, L"SQLPrepareW");
+		return false;
+	}
+	return true;
+}
+
+bool DBStatement::Reset()
+{
+	if (Hstmt == SQL_NULL_HSTMT)
+		return false;
+
+	// SQL_CLOSE 는 결과셋·커서만 닫는다. 바인딩은 유지되며 다음 SQLBindParameter/SQLBindCol 가
+	// 같은 슬롯에 새 주소를 등록하면 자동으로 덮어쓴다 — 따라서 SQL_RESET_PARAMS/SQL_UNBIND 는 불필요.
+	const SQLRETURN Ret = ::SQLFreeStmt(Hstmt, SQL_CLOSE);
+	if (SQL_SUCCEEDED(Ret) == false)
+	{
+		DBConnection::HandleError(Hstmt, SQL_HANDLE_STMT, L"SQLFreeStmt(SQL_CLOSE)");
 		return false;
 	}
 	return true;
@@ -59,6 +75,7 @@ bool DBStatement::Execute()
 
 	// SQL_NO_DATA: UPDATE/DELETE 가 0 행을 건드린 경우. 성공으로 취급 (ExecuteDirect 와 동일 의미).
 	const SQLRETURN Ret = ::SQLExecute(Hstmt);
+	
 	if (Ret == SQL_SUCCESS || Ret == SQL_SUCCESS_WITH_INFO || Ret == SQL_NO_DATA)
 		return true;
 
@@ -193,10 +210,10 @@ bool DBStatement::BindParamInt64(SQLUSMALLINT ParamIndex, int64* ValuePtr, SQLLE
 	if (Hstmt == SQL_NULL_HSTMT || ValuePtr == nullptr)
 		return false;
 
-	const SQLRETURN Ret = ::SQLBindParameter(
-		Hstmt, ParamIndex, SQL_PARAM_INPUT,
+	const SQLRETURN Ret = ::SQLBindParameter(Hstmt, ParamIndex, SQL_PARAM_INPUT,
 		SQL_C_SBIGINT, SQL_BIGINT, 0, 0,
 		ValuePtr, 0, IndicatorPtr);
+	
 	if (SQL_SUCCEEDED(Ret) == false)
 	{
 		DBConnection::HandleError(Hstmt, SQL_HANDLE_STMT, L"SQLBindParameter(INT64)");
@@ -307,8 +324,7 @@ bool DBStatement::BindParamDate(SQLUSMALLINT ParamIndex, SQL_DATE_STRUCT* ValueP
 	return true;
 }
 
-bool DBStatement::BindParamTimestamp(SQLUSMALLINT ParamIndex, SQL_TIMESTAMP_STRUCT* ValuePtr,
-                                     uint8 Precision, SQLLEN* IndicatorPtr)
+bool DBStatement::BindParamTimestamp(SQLUSMALLINT ParamIndex, SQL_TIMESTAMP_STRUCT* ValuePtr, uint8 Precision, SQLLEN* IndicatorPtr)
 {
 	if (Hstmt == SQL_NULL_HSTMT || ValuePtr == nullptr)
 		return false;
@@ -329,9 +345,7 @@ bool DBStatement::BindParamTimestamp(SQLUSMALLINT ParamIndex, SQL_TIMESTAMP_STRU
 	return true;
 }
 
-bool DBStatement::BindParamWChar(SQLUSMALLINT ParamIndex, wchar_t* ValuePtr,
-                                 SQLLEN BufferLengthBytes, SQLLEN ColumnSizeChars,
-                                 SQLLEN* IndicatorPtr)
+bool DBStatement::BindParamWChar(SQLUSMALLINT ParamIndex, wchar_t* ValuePtr, SQLLEN BufferLengthBytes, SQLLEN ColumnSizeChars, SQLLEN* IndicatorPtr)
 {
 	if (Hstmt == SQL_NULL_HSTMT || ValuePtr == nullptr)
 		return false;
@@ -350,9 +364,7 @@ bool DBStatement::BindParamWChar(SQLUSMALLINT ParamIndex, wchar_t* ValuePtr,
 	return true;
 }
 
-bool DBStatement::BindParamChar(SQLUSMALLINT ParamIndex, char* ValuePtr,
-                                SQLLEN BufferLengthBytes, SQLLEN ColumnSizeBytes,
-                                SQLLEN* IndicatorPtr)
+bool DBStatement::BindParamChar(SQLUSMALLINT ParamIndex, char* ValuePtr, SQLLEN BufferLengthBytes, SQLLEN ColumnSizeBytes, SQLLEN* IndicatorPtr)
 {
 	if (Hstmt == SQL_NULL_HSTMT || ValuePtr == nullptr)
 		return false;
@@ -370,9 +382,7 @@ bool DBStatement::BindParamChar(SQLUSMALLINT ParamIndex, char* ValuePtr,
 	return true;
 }
 
-bool DBStatement::BindParamBinary(SQLUSMALLINT ParamIndex, uint8* ValuePtr,
-                                  SQLLEN BufferLengthBytes, SQLLEN ColumnSizeBytes,
-                                  SQLLEN* IndicatorPtr)
+bool DBStatement::BindParamBinary(SQLUSMALLINT ParamIndex, uint8* ValuePtr, SQLLEN BufferLengthBytes, SQLLEN ColumnSizeBytes, SQLLEN* IndicatorPtr)
 {
 	if (Hstmt == SQL_NULL_HSTMT || ValuePtr == nullptr)
 		return false;

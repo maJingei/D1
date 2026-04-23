@@ -197,6 +197,7 @@
     <ClInclude Include="Network\ServerService.h" />
     <ClInclude Include="ServerEngine.h" />
     <ClInclude Include="$(SolutionDir)Common\UCollisionMap.h" />
+    <ClInclude Include="World\Account.h" />
     <ClInclude Include="World\Level.h" />
     <ClInclude Include="World\PlayerEntry.h" />
     <ClInclude Include="World\World.h" />

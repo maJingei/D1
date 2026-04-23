@@ -30,7 +30,7 @@ public:
 	/** ODBC 자원(HENV, HDBC N개) 을 명시적으로 회수한다. Engine.Destroy 에서 호출. 중복 호출 안전. */
 	void Shutdown();
 
-	/** 가용 연결 하나를 꺼내 반환한다. Idle 이 비어있으면(또는 Shutdown 후) nullptr. */
+	/** 가용 연결 하나를 꺼내 반환한다. Connections 이 비어있으면(또는 Shutdown 후) nullptr. */
 	DBConnection* Pop();
 
 	/** 사용 완료한 연결을 풀에 되돌려놓는다. */
@@ -40,11 +40,11 @@ private:
 	DBConnectionPool() = default;
 	~DBConnectionPool();
 
-	/** Init 실패 경로와 Shutdown 경로에서 공유. Idle 에 남아있는 연결과 HENV 를 회수한다. */
+	/** Init 실패 경로와 Shutdown 경로에서 공유. Connections 에 남아있는 연결과 HENV 를 회수한다. */
 	void TeardownUnlocked();
 
 	SQLHENV Henv = SQL_NULL_HENV;
 
 	std::mutex Mutex;
-	std::vector<DBConnection*> Idle;
+	std::vector<DBConnection*> Connections;
 };

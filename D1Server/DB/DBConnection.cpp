@@ -65,11 +65,38 @@ void DBConnection::Disconnect()
 {
 	if (Hdbc != SQL_NULL_HDBC)
 	{
+		// 캐시된 statement 들이 본 HDBC 의 자식 핸들이므로 SQLFreeHandle(DBC) 보다 먼저 비워야 한다.
+		// 부모 핸들이 먼저 해제되면 자식의 SQLFreeHandle(STMT) 가 invalid handle 위에서 일어남.
+		StmtCache.clear();
+
 		// SQLDisconnect 는 이미 연결되어 있지 않아도 안전(상태 검사 후 성공 반환).
 		::SQLDisconnect(Hdbc);
 		::SQLFreeHandle(SQL_HANDLE_DBC, Hdbc);
 		Hdbc = SQL_NULL_HDBC;
 	}
+}
+
+DBStatement* DBConnection::GetOrPrepare(const std::wstring& Sql)
+{
+	if (Hdbc == SQL_NULL_HDBC)
+		return nullptr;
+
+    // 해당 sql에 대한 statement캐시 존재하면 반환 
+	if (auto It = StmtCache.find(Sql); It != StmtCache.end())
+		return It->second.get();
+    
+    // 없으면 unique 생성
+	auto Stmt = std::make_unique<DBStatement>(Hdbc);
+	if (Stmt->IsValid() == false)
+		return nullptr;
+
+    // 그리고 바로 prepare
+	if (Stmt->Prepare(Sql.c_str()) == false)
+		return nullptr;
+
+	DBStatement* Raw = Stmt.get();
+	StmtCache.emplace(Sql, std::move(Stmt));
+	return Raw;
 }
 
 void DBConnection::HandleError(SQLHANDLE Handle, SQLSMALLINT HandleType, const wchar_t* Context)

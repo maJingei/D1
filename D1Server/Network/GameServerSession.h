@@ -1,9 +1,18 @@
 #pragma once
 
+#include <atomic>
 #include <iostream>
+#include <string>
 
 #include "Core/CoreMinimal.h"
 #include "Iocp/PacketSession.h"
+
+/** 세션 로그인 상태. DB 워커가 로그인 확정 후 Playing 전환, OnDisconnected 에서 save 여부 판단. */
+enum class ESessionState : uint8
+{
+	NotLoggedIn = 0,
+	Playing     = 1,
+};
 
 /** 서버 측 세션: PacketSession 을 상속하여 OnRecvPacket 을 서버 핸들러 테이블로 디스패치한다. */
 class GameServerSession : public PacketSession
@@ -13,21 +22,31 @@ public:
 	{
 		std::cout << "GameServerSession::~GameServerSession()" << "\n";
 	}
-	
+
 	uint64 GetPlayerID() const { return PlayerID; }
 	void SetPlayerID(uint64 InPlayerID) { PlayerID = InPlayerID; }
 
 	int32 GetLevelID() const { return LevelID; }
 	void SetLevelID(int32 InLevelID) { LevelID = InLevelID; }
 
+	ESessionState GetState() const { return State.load(); }
+	void SetState(ESessionState InState) { State.store(InState); }
+
+	const std::string& GetAccountId() const { return AccountId; }
+	/** DB 워커가 로그인 확정 시 1회 기록. proto string 그대로 복사. */
+	void SetAccountId(const std::string& InId) { AccountId = InId; }
+
 protected:
 	void OnRecvPacket(BYTE* Buffer, int32 Len) override;
 	void OnDisconnected() override;
 
 private:
-	/** C_ENTER_GAME 처리로 0 이 아닌 값이 들어간다. 0 은 '아직 입장 전' 상태. */
 	uint64 PlayerID = 0;
-
-	/** C_ENTER_GAME 처리 시 World 에서 할당받은 Level 인덱스. -1 은 '아직 입장 전'. */
 	int32 LevelID = -1;
+
+	/** dbo.Account.Id 사본. Logout 시 World.AccountMap 에서 본인 제거에 사용. */
+	std::string AccountId;
+
+	/** IOCP↔DB 워커 공유 상태. atomic 으로 가시성/순서성 보장(seq_cst 기본). */
+	std::atomic<ESessionState> State{ESessionState::NotLoggedIn};
 };

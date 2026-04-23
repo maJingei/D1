@@ -144,6 +144,34 @@ template<> ::Protocol::S_SPAWN* Arena::CreateMaybeMessage<::Protocol::S_SPAWN>(A
 PROTOBUF_NAMESPACE_CLOSE
 namespace Protocol {
 
+enum ELoginResult : int {
+  LR_SUCCESS = 0,
+  LR_INVALID_CREDENTIALS = 1,
+  LR_ALREADY_LOGGED_IN = 2,
+  LR_INVALID_REQUEST_FORMAT = 3,
+  LR_DB_ERROR = 4,
+  ELoginResult_INT_MIN_SENTINEL_DO_NOT_USE_ = std::numeric_limits<::PROTOBUF_NAMESPACE_ID::int32>::min(),
+  ELoginResult_INT_MAX_SENTINEL_DO_NOT_USE_ = std::numeric_limits<::PROTOBUF_NAMESPACE_ID::int32>::max()
+};
+bool ELoginResult_IsValid(int value);
+constexpr ELoginResult ELoginResult_MIN = LR_SUCCESS;
+constexpr ELoginResult ELoginResult_MAX = LR_DB_ERROR;
+constexpr int ELoginResult_ARRAYSIZE = ELoginResult_MAX + 1;
+
+const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* ELoginResult_descriptor();
+template<typename T>
+inline const std::string& ELoginResult_Name(T enum_t_value) {
+  static_assert(::std::is_same<T, ELoginResult>::value ||
+    ::std::is_integral<T>::value,
+    "Incorrect type passed to function ELoginResult_Name.");
+  return ::PROTOBUF_NAMESPACE_ID::internal::NameOfEnum(
+    ELoginResult_descriptor(), enum_t_value);
+}
+inline bool ELoginResult_Parse(
+    ::PROTOBUF_NAMESPACE_ID::ConstStringParam name, ELoginResult* value) {
+  return ::PROTOBUF_NAMESPACE_ID::internal::ParseNamedEnum<ELoginResult>(
+    ELoginResult_descriptor(), name, value);
+}
 enum CharacterType : int {
   CT_DEFAULT = 0,
   CT_FEMALE = 1,
@@ -309,6 +337,7 @@ class C_LOGIN final :
   enum : int {
     kIdFieldNumber = 1,
     kPwFieldNumber = 2,
+    kIsBotFieldNumber = 3,
   };
   // string id = 1;
   void clear_id();
@@ -338,6 +367,15 @@ class C_LOGIN final :
   std::string* _internal_mutable_pw();
   public:
 
+  // bool is_bot = 3;
+  void clear_is_bot();
+  bool is_bot() const;
+  void set_is_bot(bool value);
+  private:
+  bool _internal_is_bot() const;
+  void _internal_set_is_bot(bool value);
+  public:
+
   // @@protoc_insertion_point(class_scope:Protocol.C_LOGIN)
  private:
   class _Internal;
@@ -347,6 +385,7 @@ class C_LOGIN final :
   typedef void DestructorSkippable_;
   ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr id_;
   ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr pw_;
+  bool is_bot_;
   mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   friend struct ::TableStruct_Protocol_2eproto;
 };
@@ -3492,6 +3531,26 @@ inline void C_LOGIN::set_allocated_pw(std::string* pw) {
   // @@protoc_insertion_point(field_set_allocated:Protocol.C_LOGIN.pw)
 }
 
+// bool is_bot = 3;
+inline void C_LOGIN::clear_is_bot() {
+  is_bot_ = false;
+}
+inline bool C_LOGIN::_internal_is_bot() const {
+  return is_bot_;
+}
+inline bool C_LOGIN::is_bot() const {
+  // @@protoc_insertion_point(field_get:Protocol.C_LOGIN.is_bot)
+  return _internal_is_bot();
+}
+inline void C_LOGIN::_internal_set_is_bot(bool value) {
+  
+  is_bot_ = value;
+}
+inline void C_LOGIN::set_is_bot(bool value) {
+  _internal_set_is_bot(value);
+  // @@protoc_insertion_point(field_set:Protocol.C_LOGIN.is_bot)
+}
+
 // -------------------------------------------------------------------
 
 // S_LOGIN
@@ -4760,6 +4819,11 @@ inline void S_PLAYER_ATTACK::set_player_id(::PROTOBUF_NAMESPACE_ID::uint64 value
 
 PROTOBUF_NAMESPACE_OPEN
 
+template <> struct is_proto_enum< ::Protocol::ELoginResult> : ::std::true_type {};
+template <>
+inline const EnumDescriptor* GetEnumDescriptor< ::Protocol::ELoginResult>() {
+  return ::Protocol::ELoginResult_descriptor();
+}
 template <> struct is_proto_enum< ::Protocol::CharacterType> : ::std::true_type {};
 template <>
 inline const EnumDescriptor* GetEnumDescriptor< ::Protocol::CharacterType>() {

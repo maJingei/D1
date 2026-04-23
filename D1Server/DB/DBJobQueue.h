@@ -34,8 +34,9 @@ public:
 
 	/**
 	 * Pool.Pop → Fn(conn) → Pool.Push 를 감싼 Job 을 만들어 PushJob 한다. IOCP 워커가 한 줄로 사용할 수 있는 고수준 헬퍼.
+	 * Fn 은 일회성으로 소비되므로 rvalue 만 받는다. lvalue 를 넘기려면 호출자가 명시적으로 std::move 할 것.
 	 */
-	void Schedule(DBJobFn Fn);
+	void Schedule(DBJobFn&& Fn);
 
 	/** DB 스레드 루프용: 큐에 쌓인 Job 을 전부 꺼내 순서대로 실행한 뒤 반환. 비어있으면 즉시 반환. */
 	void Drain();

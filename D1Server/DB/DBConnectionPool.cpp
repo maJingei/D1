@@ -45,7 +45,7 @@ bool DBConnectionPool::Init(const wchar_t* ConnectString, int32 PoolSize)
 	}
 
 	// 2. PoolSize 만큼 DBConnection 선생성 + connect.
-	Idle.reserve(PoolSize);
+	Connections.reserve(PoolSize);
 	for (int32 i = 0; i < PoolSize; ++i)
 	{
 		DBConnection* Conn = new DBConnection(Henv);
@@ -56,7 +56,7 @@ bool DBConnectionPool::Init(const wchar_t* ConnectString, int32 PoolSize)
 			TeardownUnlocked();
 			return false;
 		}
-		Idle.push_back(Conn);
+		Connections.push_back(Conn);
 	}
 	std::cout << "[DBConnectionPool] Init OK (PoolSize=" << PoolSize << ")\n";
 	return true;
@@ -71,11 +71,11 @@ void DBConnectionPool::Shutdown()
 DBConnection* DBConnectionPool::Pop()
 {
 	std::lock_guard<std::mutex> Lock(Mutex);
-	if (Idle.empty())
+	if (Connections.empty())
 		return nullptr;
 
-	DBConnection* Conn = Idle.back();
-	Idle.pop_back();
+	DBConnection* Conn = Connections.back();
+	Connections.pop_back();
 	return Conn;
 }
 
@@ -85,14 +85,14 @@ void DBConnectionPool::Push(DBConnection* Connection)
 		return;
 
 	std::lock_guard<std::mutex> Lock(Mutex);
-	Idle.push_back(Connection);
+	Connections.push_back(Connection);
 }
 
 void DBConnectionPool::TeardownUnlocked()
 {
-	for (DBConnection* Conn : Idle)
+	for (DBConnection* Conn : Connections)
 		delete Conn;
-	Idle.clear();
+	Connections.clear();
 
 	if (Henv != SQL_NULL_HENV)
 	{

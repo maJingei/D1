@@ -36,6 +36,13 @@ public:
 	/** SQL 을 준비한다. ? 플레이스홀더 SQL 을 담아 두고 이후 BindParam* + Execute 로 넘어간다. */
 	bool Prepare(const wchar_t* Sql);
 
+	/**
+	 * 재사용 전 호출 — 직전 Execute/Fetch 가 남긴 결과셋·커서를 닫는다.
+	 * Prepare 결과(plan)와 파라미터/컬럼 바인딩은 유지된다 — 호출자가 다음 Bind 로 슬롯별 덮어쓸 것을 전제.
+	 * DBConnection 의 statement 캐시 경로에서 매 호출 첫 단계로 사용된다.
+	 */
+	bool Reset();
+
 	/** Prepare 된 문장을 현재 바인딩된 파라미터로 실행한다. SQL_NO_DATA(0 행)도 성공으로 취급. */
 	bool Execute();
 
@@ -71,26 +78,19 @@ public:
 	 * DATETIME2(p) 입력. Precision 은 SQL 정의의 p — DecimalDigits 인자에 그대로 전달되며
 	 * ColumnSize 는 (Precision == 0 ? 19 : 20 + Precision) 로 산정된다.
 	 */
-	bool BindParamTimestamp(SQLUSMALLINT ParamIndex, SQL_TIMESTAMP_STRUCT* ValuePtr,
-	                        uint8 Precision, SQLLEN* IndicatorPtr = nullptr);
+	bool BindParamTimestamp(SQLUSMALLINT ParamIndex, SQL_TIMESTAMP_STRUCT* ValuePtr, uint8 Precision, SQLLEN* IndicatorPtr = nullptr);
 
 	/**
 	 * NVARCHAR(N) 입력. BufferLengthBytes = (N+1)*sizeof(wchar_t), ColumnSizeChars = N.
 	 * IndicatorPtr 가 NULL 가능/NOT NULL 둘 다에서 사실상 필수 — 가변 길이는 ODBC 가 SQL_NTS / 실제 길이를 알아야 한다.
 	 */
-	bool BindParamWChar(SQLUSMALLINT ParamIndex, wchar_t* ValuePtr,
-	                    SQLLEN BufferLengthBytes, SQLLEN ColumnSizeChars,
-	                    SQLLEN* IndicatorPtr = nullptr);
+	bool BindParamWChar(SQLUSMALLINT ParamIndex, wchar_t* ValuePtr, SQLLEN BufferLengthBytes, SQLLEN ColumnSizeChars, SQLLEN* IndicatorPtr = nullptr);
 
 	/** VARCHAR(N) 입력. BufferLengthBytes = N+1, ColumnSizeBytes = N. */
-	bool BindParamChar(SQLUSMALLINT ParamIndex, char* ValuePtr,
-	                   SQLLEN BufferLengthBytes, SQLLEN ColumnSizeBytes,
-	                   SQLLEN* IndicatorPtr = nullptr);
+	bool BindParamChar(SQLUSMALLINT ParamIndex, char* ValuePtr, SQLLEN BufferLengthBytes, SQLLEN ColumnSizeBytes, SQLLEN* IndicatorPtr = nullptr);
 
 	/** VARBINARY(N) 입력. BufferLengthBytes = N (null term 없음), ColumnSizeBytes = N. */
-	bool BindParamBinary(SQLUSMALLINT ParamIndex, uint8* ValuePtr,
-	                     SQLLEN BufferLengthBytes, SQLLEN ColumnSizeBytes,
-	                     SQLLEN* IndicatorPtr = nullptr);
+	bool BindParamBinary(SQLUSMALLINT ParamIndex, uint8* ValuePtr, SQLLEN BufferLengthBytes, SQLLEN ColumnSizeBytes, SQLLEN* IndicatorPtr = nullptr);
 
 	// ─── BindCol 시리즈 — 출력 바인딩 (read 경로) ───────────────
 	bool BindColInt32(SQLUSMALLINT ColumnIndex, int32* OutPtr, SQLLEN* IndicatorPtr = nullptr);
@@ -103,12 +103,9 @@ public:
 	bool BindColDate(SQLUSMALLINT ColumnIndex, SQL_DATE_STRUCT* OutPtr, SQLLEN* IndicatorPtr = nullptr);
 	bool BindColTimestamp(SQLUSMALLINT ColumnIndex, SQL_TIMESTAMP_STRUCT* OutPtr, SQLLEN* IndicatorPtr = nullptr);
 
-	bool BindColWChar(SQLUSMALLINT ColumnIndex, wchar_t* OutPtr,
-	                  SQLLEN BufferLengthBytes, SQLLEN* IndicatorPtr = nullptr);
-	bool BindColChar(SQLUSMALLINT ColumnIndex, char* OutPtr,
-	                 SQLLEN BufferLengthBytes, SQLLEN* IndicatorPtr = nullptr);
-	bool BindColBinary(SQLUSMALLINT ColumnIndex, uint8* OutPtr,
-	                   SQLLEN BufferLengthBytes, SQLLEN* IndicatorPtr = nullptr);
+	bool BindColWChar(SQLUSMALLINT ColumnIndex, wchar_t* OutPtr, SQLLEN BufferLengthBytes, SQLLEN* IndicatorPtr = nullptr);
+	bool BindColChar(SQLUSMALLINT ColumnIndex, char* OutPtr, SQLLEN BufferLengthBytes, SQLLEN* IndicatorPtr = nullptr);
+	bool BindColBinary(SQLUSMALLINT ColumnIndex, uint8* OutPtr, SQLLEN BufferLengthBytes, SQLLEN* IndicatorPtr = nullptr);
 
 	SQLHSTMT GetHandle() const { return Hstmt; }
 

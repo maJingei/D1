@@ -107,9 +107,12 @@ namespace D1LoadBot
 
 	void BotSession::SendLogin()
 	{
+		// is_bot=true — 서버가 DB/중복체크를 skip 하고 메모리 전용 세션으로 진입시킨다.
+		// id/pw 는 서버 로직상 무시되지만 빈 문자열 가드를 피하기 위해 placeholder 유지.
 		Protocol::C_LOGIN Login;
 		Login.set_id("loadbot");
 		Login.set_pw("loadbot");
+		Login.set_is_bot(true);
 		Send(MakeBotSendBuffer(Login, PKT_C_LOGIN));
 	}
 
@@ -151,9 +154,8 @@ namespace D1LoadBot
 			if (Packet.ParseFromArray(Payload, PayloadSize) == false)
 				return;
 
-			// 로그인 성공 — 게임 방 입장 요청으로 전이한다.
+			// M4.5: 서버가 S_LOGIN 직후 S_ENTER_GAME 을 자동 송신하므로 클라는 대기만 한다.
 			State.store(EBotState::Entering, std::memory_order_relaxed);
-			SendEnterGame();
 			break;
 		}
 		case PKT_S_ENTER_GAME:

@@ -7,62 +7,53 @@
 
 #include <string>
 
-/**
- * 메타데이터 기반 템플릿 CRUD 파사드 (M4).
- * TableMetadata<T> 가 등록된 모든 타입에 대해 한 함수로 동작한다.
- *
- * v2 엔진: BuildXxxSql<T> 가 ? 플레이스홀더만 박힌 SQL 을 만들고, SQLBindParameter /
- * SQLBindCol 이 C++ 스택 메모리에 직접 연결된 상태에서 SQLExecute / SQLFetch 가 한 번에
- * 값을 옮긴다 — 문자열 조립/파싱을 생략하는 진짜 바인딩 경로.
- *
- * 사용자 관점 입구는 DBContext::Set<T>() 가 반환하는 DBSet<T>. DBOrm 은 그 내부
- * 위임 대상이며 외부(서버 코드)에서 직접 호출하지 않는다 — 본 클래스는 ORM 내부 구현
- * 디테일로 취급한다. M8/M9 에서 IdentityMap / ChangeTracker 가 들어오면 호출 경로는
- * DBSet<T> → (캐시 / 추적기 경유) → DBOrm 으로 한 겹 더 두꺼워진다.
- */
+/** 메타데이터 기반 템플릿 CRUD 파사드 (M4). 새 PK 타입은 DBOrmDetail::BindParamPk 오버로드만 추가. */
 class DBOrm
 {
 public:
-	/** Row 의 모든 컬럼(PK 포함) 을 INSERT. PK 중복 등으로 실패하면 false. */
+	/** 모든 컬럼(PK 포함) 을 INSERT. PK 중복 등 실패 시 false. */
 	template<typename T>
-	static bool Insert(DBConnection& Conn, const T& Row);
+	static bool Insert(DBConnection& Conn, const T& Entity);
 
-	/** PkValue(BIGINT 가정) 로 1행을 SELECT, OutRow 의 모든 등록 컬럼을 채운다. 행 없음/에러 시 false. */
-	template<typename T>
-	static bool Find(DBConnection& Conn, uint64 PkValue, OUT T& OutRow);
+	/** PK 로 1행 SELECT. PkT 는 BindParamPk 오버로드가 지원하는 모든 타입. */
+	template<typename T, typename PkT>
+	static bool Find(DBConnection& Conn, PkT PkValue, OUT T& OutEntity);
 
-	/** Row 의 PK 로 식별된 행의 비-PK 컬럼을 Row 값으로 UPDATE. 0행이어도 ODBC 가 성공으로 반환. */
+	/** 비-PK 컬럼만 UPDATE. 0행이어도 성공. */
 	template<typename T>
-	static bool Update(DBConnection& Conn, const T& Row);
+	static bool Update(DBConnection& Conn, const T& Entity);
 
-	/** PkValue 로 1행 DELETE. 0행이어도 성공으로 반환. */
-	template<typename T>
-	static bool Delete(DBConnection& Conn, uint64 PkValue);
+	/** PK 로 1행 DELETE. 0행이어도 성공. */
+	template<typename T, typename PkT>
+	static bool Delete(DBConnection& Conn, PkT PkValue);
 };
 
 namespace DBOrmDetail
 {
-	/**
-	 * ColumnMeta::CType 디스패치 — RowBase + Offset 위치를 ParamIndex(1-based) 슬롯에
-	 * SQLBindParameter 로 바인딩. M5 풀세트 12종 지원.
-	 *
-	 * RowBase 는 non-const void* — SQLBindParameter 가 input 에도 non-const 를 요구하기 때문.
-	 * 호출부는 const T& Row 로 받은 뒤 const_cast<void*>(static_cast<const void*>(&Row)) 로 진입.
-	 *
-	 * NULL 가능 컬럼은 RowBase + Col.IndicatorOffset 슬롯의 SQLLEN* 를 indicator 로 전달.
-	 * NOT NULL 은 nullptr — 단 가변 길이 NOT NULL 컬럼은 별도 처리 필요 (현 마일스톤 범위 밖).
-	 */
-	inline bool BindParamFromMeta(DBStatement& Stmt, SQLUSMALLINT ParamIndex, const ColumnMeta& Col, void* RowBase)
+	/** NOT NULL 문자열 파라미터용 공유 SQL_NTS 슬롯. thread_local 로 수명 무한. */
+	inline SQLLEN& GetSqlNtsIndicator()
 	{
-		char* Src = static_cast<char*>(RowBase) + Col.Offset;
-		SQLLEN* Ind = Col.bNullable	? reinterpret_cast<SQLLEN*>(static_cast<char*>(RowBase) + Col.IndicatorOffset) : nullptr;
+		static thread_local SQLLEN NtsInd = SQL_NTS;
+		NtsInd = SQL_NTS;
+		return NtsInd;
+	}
+
+	/** ColumnMeta::CType 디스패치로 SQLBindParameter 호출. NOT NULL 문자열은 공유 SQL_NTS 를 indicator 로 넘긴다. */
+	inline bool BindParamFromMeta(DBStatement& Stmt, SQLUSMALLINT ParamIndex, const ColumnMeta& Col, void* EntityBase)
+	{
+		// entity 처음 주소에서 열의 offset만 더해서 src 계산
+		char* Src = static_cast<char*>(EntityBase) + Col.Offset;
+		SQLLEN* Ind = Col.bNullable ? reinterpret_cast<SQLLEN*>(static_cast<char*>(EntityBase) + Col.IndicatorOffset) : nullptr;
+
+		// NOT NULL 문자열은 ODBC 에 길이 근거(SQL_NTS)를 반드시 제공해야 바인딩이 성립한다.
+		if (Ind == nullptr && (Col.CType == ESqlCType::WChar || Col.CType == ESqlCType::Char))
+			Ind = &GetSqlNtsIndicator();
 
 		switch (Col.CType)
 		{
 			case ESqlCType::SBigInt:
 				return Stmt.BindParamInt64(ParamIndex, reinterpret_cast<int64*>(Src), Ind);
 			case ESqlCType::SLong:
-				// enum (예: Protocol::CharacterType) 도 sizeof == 4 가정으로 동일 슬롯에 직결된다.
 				return Stmt.BindParamInt32(ParamIndex, reinterpret_cast<int32*>(Src), Ind);
 			case ESqlCType::SShort:
 				return Stmt.BindParamInt16(ParamIndex, reinterpret_cast<int16*>(Src), Ind);
@@ -88,17 +79,11 @@ namespace DBOrmDetail
 		return false;
 	}
 
-	/**
-	 * ColumnMeta::CType 디스패치 — RowBase + Offset 위치를 ColumnIndex(1-based) 슬롯에
-	 * SQLBindCol 로 바인딩. Fetch 한 번에 모든 바인딩된 메모리에 값이 한꺼번에 기록된다.
-	 *
-	 * NULL 가능 컬럼은 ODBC 가 RowBase + Col.IndicatorOffset 의 SQLLEN 슬롯에 SQL_NULL_DATA
-	 * 또는 실제 byte 길이를 기록해 호출자가 NULL 판별을 할 수 있게 한다.
-	 */
-	inline bool BindColFromMeta(DBStatement& Stmt, SQLUSMALLINT ColumnIndex, const ColumnMeta& Col, void* RowBase)
+	/** ColumnMeta::CType 디스패치로 SQLBindCol 호출. NULL 가능 컬럼은 Entity 내 _Ind 슬롯을 indicator 로 전달. */
+	inline bool BindColFromMeta(DBStatement& Stmt, SQLUSMALLINT ColumnIndex, const ColumnMeta& Col, void* EntityBase)
 	{
-		char* Dst = static_cast<char*>(RowBase) + Col.Offset;
-		SQLLEN* Ind = Col.bNullable ? reinterpret_cast<SQLLEN*>(static_cast<char*>(RowBase) + Col.IndicatorOffset) : nullptr;
+		char* Dst = static_cast<char*>(EntityBase) + Col.Offset;
+		SQLLEN* Ind = Col.bNullable ? reinterpret_cast<SQLLEN*>(static_cast<char*>(EntityBase) + Col.IndicatorOffset) : nullptr;
 
 		switch (Col.CType)
 		{
@@ -129,111 +114,142 @@ namespace DBOrmDetail
 		}
 		return false;
 	}
+
+	/** PK 바인딩용 스택 스토리지. Find/Delete 의 지역 스코프에 1개 선언해 BindParamPk 에 참조로 넘긴다. */
+	struct PkBindStorage
+	{
+		int64 Int64Buf = 0;
+		SQLLEN NtsInd = SQL_NTS;
+	};
+
+	/** BIGINT PK. uint64 → int64 복사본을 Storage 에 두고 그 주소를 바인딩. */
+	inline bool BindParamPk(DBStatement& Stmt, SQLUSMALLINT ParamIndex, const ColumnMeta& /*PkCol*/, uint64 PkValue, PkBindStorage& Storage)
+	{
+		Storage.Int64Buf = static_cast<int64>(PkValue);
+		return Stmt.BindParamInt64(ParamIndex, &Storage.Int64Buf);
+	}
+
+	/** NVARCHAR(N) PK. PkValue 는 null-term 문자열 — 호출자가 Execute 까지 수명 보장. */
+	inline bool BindParamPk(DBStatement& Stmt, SQLUSMALLINT ParamIndex, const ColumnMeta& PkCol, const wchar_t* PkValue, PkBindStorage& Storage)
+	{
+		Storage.NtsInd = SQL_NTS;
+		return Stmt.BindParamWChar(ParamIndex,
+			const_cast<wchar_t*>(PkValue),
+			static_cast<SQLLEN>(PkCol.Size),
+			static_cast<SQLLEN>(PkCol.Length),
+			&Storage.NtsInd);
+	}
+
+	/** VARCHAR(N) PK. Account.Id 처럼 char 기반 natural key 를 쓰는 엔티티용. */
+	inline bool BindParamPk(DBStatement& Stmt, SQLUSMALLINT ParamIndex, const ColumnMeta& PkCol, const char* PkValue, PkBindStorage& Storage)
+	{
+		Storage.NtsInd = SQL_NTS;
+		return Stmt.BindParamChar(ParamIndex,
+			const_cast<char*>(PkValue),
+			static_cast<SQLLEN>(PkCol.Size),
+			static_cast<SQLLEN>(PkCol.Length),
+			&Storage.NtsInd);
+	}
 }
 
 template<typename T>
-bool DBOrm::Insert(DBConnection& Conn, const T& Row)
+bool DBOrm::Insert(DBConnection& Conn, const T& Entity)
 {
-	DBStatement Stmt(Conn.GetHandle());
-	if (Stmt.IsValid() == false)
+	// 1. insert SQL 텍스트 생성. statement에 캐시되어 있으면 캐시 반환
+	DBStatement* Stmt = Conn.GetOrPrepare(BuildInsertSql<T>());
+	if (Stmt == nullptr)
 		return false;
 
-	const std::wstring Sql = BuildInsertSql<T>();
-	if (Stmt.Prepare(Sql.c_str()) == false)
+	// 2. 직전 호출의 커서 잔재 정리. 첫 사용이거나 INSERT 라 결과셋이 없어도 SQL_CLOSE 는 no-op 으로 안전.
+	if (Stmt->Reset() == false)
 		return false;
 
-	// 모든 컬럼(PK 포함) 을 선언 순서 그대로 1..N 슬롯에 바인딩.
-	// ValuePtr 는 Row 의 필드 주소 — Row 의 수명이 Execute 호출까지 보장돼 있어 안전.
+	// 3. 생성된 sql구문의 ?에 T타입의 메타데이터를 가져와서 바인딩. 같은 슬롯 재바인딩은 ODBC 가 자동 덮어씀.
 	const auto& Meta = GetTableMetadata<T>();
-	void* RowBase = const_cast<void*>(static_cast<const void*>(&Row));
+	void* EntityBase = const_cast<void*>(static_cast<const void*>(&Entity));
 	for (size_t i = 0; i < Meta.NumColumns; ++i)
 	{
-		if (DBOrmDetail::BindParamFromMeta(Stmt, static_cast<SQLUSMALLINT>(i + 1), Meta.Columns[i], RowBase) == false)
+		if (DBOrmDetail::BindParamFromMeta(*Stmt, static_cast<SQLUSMALLINT>(i + 1), Meta.Columns[i], EntityBase) == false)
 			return false;
 	}
 
-	return Stmt.Execute();
+	return Stmt->Execute();
 }
 
-template<typename T>
-bool DBOrm::Find(DBConnection& Conn, uint64 PkValue, T& OutRow)
+template<typename T, typename PkT>
+bool DBOrm::Find(DBConnection& Conn, PkT PkValue, T& OutEntity)
 {
-	DBStatement Stmt(Conn.GetHandle());
-	if (Stmt.IsValid() == false)
+	DBStatement* Stmt = Conn.GetOrPrepare(BuildSelectByPkSql<T>());
+	if (Stmt == nullptr)
 		return false;
 
-	const std::wstring Sql = BuildSelectByPkSql<T>();
-	if (Stmt.Prepare(Sql.c_str()) == false)
+	// SELECT 는 결과셋을 남기므로 직전 호출이 있었다면 SQL_CLOSE 가 핵심 — 없으면 "Function sequence error" 발생.
+	if (Stmt->Reset() == false)
 		return false;
 
-	// WHERE ? — PkValue 는 지역변수로 Fetch 까지 살아있다 (함수 스코프 보장).
-	// SQL_C_SBIGINT 가 int64 를 요구하므로 uint64 → int64 재해석.
-	if (Stmt.BindParamInt64(1, reinterpret_cast<int64*>(&PkValue)) == false)
-		return false;
-
-	// 모든 컬럼을 OutRow 의 필드 주소에 BindCol — Fetch 한 번이면 전체 store 가 끝난다.
-	// partial-write 루프가 사라져 M3 의 반쪽 기록 위험도 자연 해소.
 	const auto& Meta = GetTableMetadata<T>();
-	void* RowBase = static_cast<void*>(&OutRow);
+	const ColumnMeta& PkCol = Meta.Columns[Meta.PkIndex];
+	DBOrmDetail::PkBindStorage Storage;
+	if (DBOrmDetail::BindParamPk(*Stmt, 1, PkCol, PkValue, Storage) == false)
+		return false;
+
+	void* EntityBase = static_cast<void*>(&OutEntity);
 	for (size_t i = 0; i < Meta.NumColumns; ++i)
 	{
-		if (DBOrmDetail::BindColFromMeta(Stmt, static_cast<SQLUSMALLINT>(i + 1), Meta.Columns[i], RowBase) == false)
+		if (DBOrmDetail::BindColFromMeta(*Stmt, static_cast<SQLUSMALLINT>(i + 1), Meta.Columns[i], EntityBase) == false)
 			return false;
 	}
 
-	if (Stmt.Execute() == false)
+	if (Stmt->Execute() == false)
 		return false;
 
-	// Fetch false = SQL_NO_DATA(행 없음) 또는 페치 실패. 둘 다 "Find 실패" 로 호출자에게 반환.
-	return Stmt.Fetch();
+	return Stmt->Fetch();
 }
 
 template<typename T>
-bool DBOrm::Update(DBConnection& Conn, const T& Row)
+bool DBOrm::Update(DBConnection& Conn, const T& Entity)
 {
-	DBStatement Stmt(Conn.GetHandle());
-	if (Stmt.IsValid() == false)
+	DBStatement* Stmt = Conn.GetOrPrepare(BuildUpdateSql<T>());
+	if (Stmt == nullptr)
 		return false;
 
-	const std::wstring Sql = BuildUpdateSql<T>();
-	if (Stmt.Prepare(Sql.c_str()) == false)
+	if (Stmt->Reset() == false)
 		return false;
 
 	const auto& Meta = GetTableMetadata<T>();
-	void* RowBase = const_cast<void*>(static_cast<const void*>(&Row));
+	void* EntityBase = const_cast<void*>(static_cast<const void*>(&Entity));
 
-	// SET 절 바인딩 — PK 를 제외한 컬럼만 순서대로 1..N-1 슬롯에.
+	// SET 절: PK 제외 전 컬럼을 1..N-1 슬롯에 바인딩.
 	SQLUSMALLINT ParamIdx = 1;
 	for (size_t i = 0; i < Meta.NumColumns; ++i)
 	{
 		if (i == Meta.PkIndex) continue;
-		if (DBOrmDetail::BindParamFromMeta(Stmt, ParamIdx++, Meta.Columns[i], RowBase) == false)
+		if (DBOrmDetail::BindParamFromMeta(*Stmt, ParamIdx++, Meta.Columns[i], EntityBase) == false)
 			return false;
 	}
 
-	// WHERE Pk = ? — Row 의 PK 슬롯 주소를 그대로 넘긴다. Row 의 수명이 Execute 까지 보장됨.
-	const ColumnMeta& PkCol = Meta.Columns[Meta.PkIndex];
-	int64* PkPtr = reinterpret_cast<int64*>(static_cast<char*>(RowBase) + PkCol.Offset);
-	if (Stmt.BindParamInt64(ParamIdx, PkPtr) == false)
+	// WHERE Pk = ? — 메타 디스패치 경유라 BIGINT/NVARCHAR PK 모두 자동 지원.
+	if (DBOrmDetail::BindParamFromMeta(*Stmt, ParamIdx, Meta.Columns[Meta.PkIndex], EntityBase) == false)
 		return false;
 
-	return Stmt.Execute();
+	return Stmt->Execute();
 }
 
-template<typename T>
-bool DBOrm::Delete(DBConnection& Conn, uint64 PkValue)
+template<typename T, typename PkT>
+bool DBOrm::Delete(DBConnection& Conn, PkT PkValue)
 {
-	DBStatement Stmt(Conn.GetHandle());
-	if (Stmt.IsValid() == false)
+	DBStatement* Stmt = Conn.GetOrPrepare(BuildDeleteByPkSql<T>());
+	if (Stmt == nullptr)
 		return false;
 
-	const std::wstring Sql = BuildDeleteByPkSql<T>();
-	if (Stmt.Prepare(Sql.c_str()) == false)
+	if (Stmt->Reset() == false)
 		return false;
 
-	// PkValue 는 함수 파라미터 — Execute 까지 스코프 생존.
-	if (Stmt.BindParamInt64(1, reinterpret_cast<int64*>(&PkValue)) == false)
+	const auto& Meta = GetTableMetadata<T>();
+	const ColumnMeta& PkCol = Meta.Columns[Meta.PkIndex];
+	DBOrmDetail::PkBindStorage Storage;
+	if (DBOrmDetail::BindParamPk(*Stmt, 1, PkCol, PkValue, Storage) == false)
 		return false;
 
-	return Stmt.Execute();
+	return Stmt->Execute();
 }

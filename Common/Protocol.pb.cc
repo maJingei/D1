@@ -20,7 +20,8 @@ namespace Protocol {
 constexpr C_LOGIN::C_LOGIN(
   ::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized)
   : id_(&::PROTOBUF_NAMESPACE_ID::internal::fixed_address_empty_string)
-  , pw_(&::PROTOBUF_NAMESPACE_ID::internal::fixed_address_empty_string){}
+  , pw_(&::PROTOBUF_NAMESPACE_ID::internal::fixed_address_empty_string)
+  , is_bot_(false){}
 struct C_LOGINDefaultTypeInternal {
   constexpr C_LOGINDefaultTypeInternal()
     : _instance(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized{}) {}
@@ -312,7 +313,7 @@ struct S_PLAYER_ATTACKDefaultTypeInternal {
 PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT S_PLAYER_ATTACKDefaultTypeInternal _S_PLAYER_ATTACK_default_instance_;
 }  // namespace Protocol
 static ::PROTOBUF_NAMESPACE_ID::Metadata file_level_metadata_Protocol_2eproto[21];
-static const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* file_level_enum_descriptors_Protocol_2eproto[2];
+static const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* file_level_enum_descriptors_Protocol_2eproto[3];
 static constexpr ::PROTOBUF_NAMESPACE_ID::ServiceDescriptor const** file_level_service_descriptors_Protocol_2eproto = nullptr;
 
 const ::PROTOBUF_NAMESPACE_ID::uint32 TableStruct_Protocol_2eproto::offsets[] PROTOBUF_SECTION_VARIABLE(protodesc_cold) = {
@@ -323,6 +324,7 @@ const ::PROTOBUF_NAMESPACE_ID::uint32 TableStruct_Protocol_2eproto::offsets[] PR
   ~0u,  // no _weak_field_map_
   PROTOBUF_FIELD_OFFSET(::Protocol::C_LOGIN, id_),
   PROTOBUF_FIELD_OFFSET(::Protocol::C_LOGIN, pw_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::C_LOGIN, is_bot_),
   ~0u,  // no _has_bits_
   PROTOBUF_FIELD_OFFSET(::Protocol::S_LOGIN, _internal_metadata_),
   ~0u,  // no _extensions_
@@ -481,26 +483,26 @@ const ::PROTOBUF_NAMESPACE_ID::uint32 TableStruct_Protocol_2eproto::offsets[] PR
 };
 static const ::PROTOBUF_NAMESPACE_ID::internal::MigrationSchema schemas[] PROTOBUF_SECTION_VARIABLE(protodesc_cold) = {
   { 0, -1, sizeof(::Protocol::C_LOGIN)},
-  { 7, -1, sizeof(::Protocol::S_LOGIN)},
-  { 14, -1, sizeof(::Protocol::PlayerInfo)},
-  { 23, -1, sizeof(::Protocol::MonsterInfo)},
-  { 31, -1, sizeof(::Protocol::C_ENTER_GAME)},
-  { 36, -1, sizeof(::Protocol::S_ENTER_GAME)},
-  { 49, -1, sizeof(::Protocol::S_SPAWN)},
-  { 58, -1, sizeof(::Protocol::C_MOVE)},
-  { 65, -1, sizeof(::Protocol::S_MOVE)},
-  { 75, -1, sizeof(::Protocol::S_MOVE_REJECT)},
-  { 85, -1, sizeof(::Protocol::S_MONSTER_SPAWN)},
-  { 93, -1, sizeof(::Protocol::S_MONSTER_MOVE)},
-  { 101, -1, sizeof(::Protocol::S_MONSTER_ATTACK)},
-  { 108, -1, sizeof(::Protocol::S_PLAYER_DAMAGED)},
-  { 116, -1, sizeof(::Protocol::S_PLAYER_DIED)},
-  { 122, -1, sizeof(::Protocol::C_ATTACK)},
-  { 128, -1, sizeof(::Protocol::S_MONSTER_DAMAGED)},
-  { 136, -1, sizeof(::Protocol::S_MONSTER_DIED)},
-  { 142, -1, sizeof(::Protocol::S_PORTAL_TELEPORT)},
-  { 150, -1, sizeof(::Protocol::S_PLAYER_LEFT)},
-  { 156, -1, sizeof(::Protocol::S_PLAYER_ATTACK)},
+  { 8, -1, sizeof(::Protocol::S_LOGIN)},
+  { 15, -1, sizeof(::Protocol::PlayerInfo)},
+  { 24, -1, sizeof(::Protocol::MonsterInfo)},
+  { 32, -1, sizeof(::Protocol::C_ENTER_GAME)},
+  { 37, -1, sizeof(::Protocol::S_ENTER_GAME)},
+  { 50, -1, sizeof(::Protocol::S_SPAWN)},
+  { 59, -1, sizeof(::Protocol::C_MOVE)},
+  { 66, -1, sizeof(::Protocol::S_MOVE)},
+  { 76, -1, sizeof(::Protocol::S_MOVE_REJECT)},
+  { 86, -1, sizeof(::Protocol::S_MONSTER_SPAWN)},
+  { 94, -1, sizeof(::Protocol::S_MONSTER_MOVE)},
+  { 102, -1, sizeof(::Protocol::S_MONSTER_ATTACK)},
+  { 109, -1, sizeof(::Protocol::S_PLAYER_DAMAGED)},
+  { 117, -1, sizeof(::Protocol::S_PLAYER_DIED)},
+  { 123, -1, sizeof(::Protocol::C_ATTACK)},
+  { 129, -1, sizeof(::Protocol::S_MONSTER_DAMAGED)},
+  { 137, -1, sizeof(::Protocol::S_MONSTER_DIED)},
+  { 143, -1, sizeof(::Protocol::S_PORTAL_TELEPORT)},
+  { 151, -1, sizeof(::Protocol::S_PLAYER_LEFT)},
+  { 157, -1, sizeof(::Protocol::S_PLAYER_ATTACK)},
 };
 
 static ::PROTOBUF_NAMESPACE_ID::Message const * const file_default_instances[] = {
@@ -528,53 +530,56 @@ static ::PROTOBUF_NAMESPACE_ID::Message const * const file_default_instances[] =
 };
 
 const char descriptor_table_protodef_Protocol_2eproto[] PROTOBUF_SECTION_VARIABLE(protodesc_cold) =
-  "\n\016Protocol.proto\022\010Protocol\"!\n\007C_LOGIN\022\n\n"
-  "\002id\030\001 \001(\t\022\n\n\002pw\030\002 \001(\t\"*\n\007S_LOGIN\022\016\n\006resu"
-  "lt\030\001 \001(\r\022\017\n\007user_id\030\002 \001(\004\"p\n\nPlayerInfo\022"
-  "\021\n\tplayer_id\030\001 \001(\004\022\016\n\006tile_x\030\002 \001(\005\022\016\n\006ti"
-  "le_y\030\003 \001(\005\022/\n\016character_type\030\004 \001(\0162\027.Pro"
-  "tocol.CharacterType\"A\n\013MonsterInfo\022\022\n\nmo"
-  "nster_id\030\001 \001(\004\022\016\n\006tile_x\030\002 \001(\005\022\016\n\006tile_y"
-  "\030\003 \001(\005\"\016\n\014C_ENTER_GAME\"\346\001\n\014S_ENTER_GAME\022"
-  "\021\n\tplayer_id\030\001 \001(\004\022\016\n\006tile_x\030\002 \001(\005\022\016\n\006ti"
-  "le_y\030\003 \001(\005\022$\n\006others\030\004 \003(\0132\024.Protocol.Pl"
-  "ayerInfo\022\017\n\007room_id\030\005 \001(\r\022\'\n\010monsters\030\006 "
-  "\003(\0132\025.Protocol.MonsterInfo\022\022\n\nmove_speed"
-  "\030\007 \001(\002\022/\n\016character_type\030\010 \001(\0162\027.Protoco"
-  "l.CharacterType\"m\n\007S_SPAWN\022\021\n\tplayer_id\030"
-  "\001 \001(\004\022\016\n\006tile_x\030\002 \001(\005\022\016\n\006tile_y\030\003 \001(\005\022/\n"
-  "\016character_type\030\004 \001(\0162\027.Protocol.Charact"
-  "erType\">\n\006C_MOVE\022 \n\003dir\030\001 \001(\0162\023.Protocol"
-  ".Direction\022\022\n\nclient_seq\030\002 \001(\004\"q\n\006S_MOVE"
-  "\022\021\n\tplayer_id\030\001 \001(\004\022\016\n\006tile_x\030\002 \001(\005\022\016\n\006t"
-  "ile_y\030\003 \001(\005\022 \n\003dir\030\004 \001(\0162\023.Protocol.Dire"
-  "ction\022\022\n\nclient_seq\030\005 \001(\004\"q\n\rS_MOVE_REJE"
-  "CT\022\021\n\tplayer_id\030\001 \001(\004\022\016\n\006tile_x\030\002 \001(\005\022\016\n"
-  "\006tile_y\030\003 \001(\005\022\022\n\nclient_seq\030\004 \001(\004\022\031\n\021las"
-  "t_accepted_seq\030\005 \001(\004\"E\n\017S_MONSTER_SPAWN\022"
-  "\022\n\nmonster_id\030\001 \001(\004\022\016\n\006tile_x\030\002 \001(\005\022\016\n\006t"
-  "ile_y\030\003 \001(\005\"D\n\016S_MONSTER_MOVE\022\022\n\nmonster"
-  "_id\030\001 \001(\004\022\016\n\006tile_x\030\002 \001(\005\022\016\n\006tile_y\030\003 \001("
-  "\005\"@\n\020S_MONSTER_ATTACK\022\022\n\nmonster_id\030\001 \001("
-  "\004\022\030\n\020target_player_id\030\002 \001(\004\"A\n\020S_PLAYER_"
-  "DAMAGED\022\021\n\tplayer_id\030\001 \001(\004\022\n\n\002hp\030\002 \001(\005\022\016"
-  "\n\006max_hp\030\003 \001(\005\"\"\n\rS_PLAYER_DIED\022\021\n\tplaye"
-  "r_id\030\001 \001(\004\"\036\n\010C_ATTACK\022\022\n\nclient_seq\030\001 \001"
-  "(\004\"C\n\021S_MONSTER_DAMAGED\022\022\n\nmonster_id\030\001 "
-  "\001(\004\022\n\n\002hp\030\002 \001(\005\022\016\n\006max_hp\030\003 \001(\005\"$\n\016S_MON"
-  "STER_DIED\022\022\n\nmonster_id\030\001 \001(\004\"U\n\021S_PORTA"
-  "L_TELEPORT\022\024\n\014new_level_id\030\001 \001(\r\022\024\n\014spaw"
-  "n_tile_x\030\002 \001(\005\022\024\n\014spawn_tile_y\030\003 \001(\005\"\"\n\r"
-  "S_PLAYER_LEFT\022\021\n\tplayer_id\030\001 \001(\004\"$\n\017S_PL"
-  "AYER_ATTACK\022\021\n\tplayer_id\030\001 \001(\004*<\n\rCharac"
-  "terType\022\016\n\nCT_DEFAULT\020\000\022\r\n\tCT_FEMALE\020\001\022\014"
-  "\n\010CT_DWARF\020\002*B\n\tDirection\022\n\n\006DIR_UP\020\000\022\014\n"
-  "\010DIR_DOWN\020\001\022\014\n\010DIR_LEFT\020\002\022\r\n\tDIR_RIGHT\020\003"
-  "b\006proto3"
+  "\n\016Protocol.proto\022\010Protocol\"1\n\007C_LOGIN\022\n\n"
+  "\002id\030\001 \001(\t\022\n\n\002pw\030\002 \001(\t\022\016\n\006is_bot\030\003 \001(\010\"*\n"
+  "\007S_LOGIN\022\016\n\006result\030\001 \001(\r\022\017\n\007user_id\030\002 \001("
+  "\004\"p\n\nPlayerInfo\022\021\n\tplayer_id\030\001 \001(\004\022\016\n\006ti"
+  "le_x\030\002 \001(\005\022\016\n\006tile_y\030\003 \001(\005\022/\n\016character_"
+  "type\030\004 \001(\0162\027.Protocol.CharacterType\"A\n\013M"
+  "onsterInfo\022\022\n\nmonster_id\030\001 \001(\004\022\016\n\006tile_x"
+  "\030\002 \001(\005\022\016\n\006tile_y\030\003 \001(\005\"\016\n\014C_ENTER_GAME\"\346"
+  "\001\n\014S_ENTER_GAME\022\021\n\tplayer_id\030\001 \001(\004\022\016\n\006ti"
+  "le_x\030\002 \001(\005\022\016\n\006tile_y\030\003 \001(\005\022$\n\006others\030\004 \003"
+  "(\0132\024.Protocol.PlayerInfo\022\017\n\007room_id\030\005 \001("
+  "\r\022\'\n\010monsters\030\006 \003(\0132\025.Protocol.MonsterIn"
+  "fo\022\022\n\nmove_speed\030\007 \001(\002\022/\n\016character_type"
+  "\030\010 \001(\0162\027.Protocol.CharacterType\"m\n\007S_SPA"
+  "WN\022\021\n\tplayer_id\030\001 \001(\004\022\016\n\006tile_x\030\002 \001(\005\022\016\n"
+  "\006tile_y\030\003 \001(\005\022/\n\016character_type\030\004 \001(\0162\027."
+  "Protocol.CharacterType\">\n\006C_MOVE\022 \n\003dir\030"
+  "\001 \001(\0162\023.Protocol.Direction\022\022\n\nclient_seq"
+  "\030\002 \001(\004\"q\n\006S_MOVE\022\021\n\tplayer_id\030\001 \001(\004\022\016\n\006t"
+  "ile_x\030\002 \001(\005\022\016\n\006tile_y\030\003 \001(\005\022 \n\003dir\030\004 \001(\016"
+  "2\023.Protocol.Direction\022\022\n\nclient_seq\030\005 \001("
+  "\004\"q\n\rS_MOVE_REJECT\022\021\n\tplayer_id\030\001 \001(\004\022\016\n"
+  "\006tile_x\030\002 \001(\005\022\016\n\006tile_y\030\003 \001(\005\022\022\n\nclient_"
+  "seq\030\004 \001(\004\022\031\n\021last_accepted_seq\030\005 \001(\004\"E\n\017"
+  "S_MONSTER_SPAWN\022\022\n\nmonster_id\030\001 \001(\004\022\016\n\006t"
+  "ile_x\030\002 \001(\005\022\016\n\006tile_y\030\003 \001(\005\"D\n\016S_MONSTER"
+  "_MOVE\022\022\n\nmonster_id\030\001 \001(\004\022\016\n\006tile_x\030\002 \001("
+  "\005\022\016\n\006tile_y\030\003 \001(\005\"@\n\020S_MONSTER_ATTACK\022\022\n"
+  "\nmonster_id\030\001 \001(\004\022\030\n\020target_player_id\030\002 "
+  "\001(\004\"A\n\020S_PLAYER_DAMAGED\022\021\n\tplayer_id\030\001 \001"
+  "(\004\022\n\n\002hp\030\002 \001(\005\022\016\n\006max_hp\030\003 \001(\005\"\"\n\rS_PLAY"
+  "ER_DIED\022\021\n\tplayer_id\030\001 \001(\004\"\036\n\010C_ATTACK\022\022"
+  "\n\nclient_seq\030\001 \001(\004\"C\n\021S_MONSTER_DAMAGED\022"
+  "\022\n\nmonster_id\030\001 \001(\004\022\n\n\002hp\030\002 \001(\005\022\016\n\006max_h"
+  "p\030\003 \001(\005\"$\n\016S_MONSTER_DIED\022\022\n\nmonster_id\030"
+  "\001 \001(\004\"U\n\021S_PORTAL_TELEPORT\022\024\n\014new_level_"
+  "id\030\001 \001(\r\022\024\n\014spawn_tile_x\030\002 \001(\005\022\024\n\014spawn_"
+  "tile_y\030\003 \001(\005\"\"\n\rS_PLAYER_LEFT\022\021\n\tplayer_"
+  "id\030\001 \001(\004\"$\n\017S_PLAYER_ATTACK\022\021\n\tplayer_id"
+  "\030\001 \001(\004*\204\001\n\014ELoginResult\022\016\n\nLR_SUCCESS\020\000\022"
+  "\032\n\026LR_INVALID_CREDENTIALS\020\001\022\030\n\024LR_ALREAD"
+  "Y_LOGGED_IN\020\002\022\035\n\031LR_INVALID_REQUEST_FORM"
+  "AT\020\003\022\017\n\013LR_DB_ERROR\020\004*<\n\rCharacterType\022\016"
+  "\n\nCT_DEFAULT\020\000\022\r\n\tCT_FEMALE\020\001\022\014\n\010CT_DWAR"
+  "F\020\002*B\n\tDirection\022\n\n\006DIR_UP\020\000\022\014\n\010DIR_DOWN"
+  "\020\001\022\014\n\010DIR_LEFT\020\002\022\r\n\tDIR_RIGHT\020\003b\006proto3"
   ;
 static ::PROTOBUF_NAMESPACE_ID::internal::once_flag descriptor_table_Protocol_2eproto_once;
 const ::PROTOBUF_NAMESPACE_ID::internal::DescriptorTable descriptor_table_Protocol_2eproto = {
-  false, false, 1688, descriptor_table_protodef_Protocol_2eproto, "Protocol.proto", 
+  false, false, 1839, descriptor_table_protodef_Protocol_2eproto, "Protocol.proto", 
   &descriptor_table_Protocol_2eproto_once, nullptr, 0, 21,
   schemas, file_default_instances, TableStruct_Protocol_2eproto::offsets,
   file_level_metadata_Protocol_2eproto, file_level_enum_descriptors_Protocol_2eproto, file_level_service_descriptors_Protocol_2eproto,
@@ -586,9 +591,26 @@ PROTOBUF_ATTRIBUTE_WEAK const ::PROTOBUF_NAMESPACE_ID::internal::DescriptorTable
 // Force running AddDescriptors() at dynamic initialization time.
 PROTOBUF_ATTRIBUTE_INIT_PRIORITY static ::PROTOBUF_NAMESPACE_ID::internal::AddDescriptorsRunner dynamic_init_dummy_Protocol_2eproto(&descriptor_table_Protocol_2eproto);
 namespace Protocol {
-const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* CharacterType_descriptor() {
+const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* ELoginResult_descriptor() {
   ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&descriptor_table_Protocol_2eproto);
   return file_level_enum_descriptors_Protocol_2eproto[0];
+}
+bool ELoginResult_IsValid(int value) {
+  switch (value) {
+    case 0:
+    case 1:
+    case 2:
+    case 3:
+    case 4:
+      return true;
+    default:
+      return false;
+  }
+}
+
+const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* CharacterType_descriptor() {
+  ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&descriptor_table_Protocol_2eproto);
+  return file_level_enum_descriptors_Protocol_2eproto[1];
 }
 bool CharacterType_IsValid(int value) {
   switch (value) {
@@ -603,7 +625,7 @@ bool CharacterType_IsValid(int value) {
 
 const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* Direction_descriptor() {
   ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&descriptor_table_Protocol_2eproto);
-  return file_level_enum_descriptors_Protocol_2eproto[1];
+  return file_level_enum_descriptors_Protocol_2eproto[2];
 }
 bool Direction_IsValid(int value) {
   switch (value) {
@@ -643,12 +665,14 @@ C_LOGIN::C_LOGIN(const C_LOGIN& from)
     pw_.Set(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, from._internal_pw(), 
       GetArenaForAllocation());
   }
+  is_bot_ = from.is_bot_;
   // @@protoc_insertion_point(copy_constructor:Protocol.C_LOGIN)
 }
 
 void C_LOGIN::SharedCtor() {
 id_.UnsafeSetDefault(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited());
 pw_.UnsafeSetDefault(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited());
+is_bot_ = false;
 }
 
 C_LOGIN::~C_LOGIN() {
@@ -681,6 +705,7 @@ void C_LOGIN::Clear() {
 
   id_.ClearToEmpty();
   pw_.ClearToEmpty();
+  is_bot_ = false;
   _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
 }
 
@@ -705,6 +730,13 @@ const char* C_LOGIN::_InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::in
           auto str = _internal_mutable_pw();
           ptr = ::PROTOBUF_NAMESPACE_ID::internal::InlineGreedyStringParser(str, ptr, ctx);
           CHK_(::PROTOBUF_NAMESPACE_ID::internal::VerifyUTF8(str, "Protocol.C_LOGIN.pw"));
+          CHK_(ptr);
+        } else goto handle_unusual;
+        continue;
+      // bool is_bot = 3;
+      case 3:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 24)) {
+          is_bot_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
           CHK_(ptr);
         } else goto handle_unusual;
         continue;
@@ -757,6 +789,12 @@ failure:
         2, this->_internal_pw(), target);
   }
 
+  // bool is_bot = 3;
+  if (this->is_bot() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteBoolToArray(3, this->_internal_is_bot(), target);
+  }
+
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
     target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormat::InternalSerializeUnknownFieldsToArray(
         _internal_metadata_.unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(::PROTOBUF_NAMESPACE_ID::UnknownFieldSet::default_instance), target, stream);
@@ -785,6 +823,11 @@ size_t C_LOGIN::ByteSizeLong() const {
     total_size += 1 +
       ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::StringSize(
         this->_internal_pw());
+  }
+
+  // bool is_bot = 3;
+  if (this->is_bot() != 0) {
+    total_size += 1 + 1;
   }
 
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
@@ -824,6 +867,9 @@ void C_LOGIN::MergeFrom(const C_LOGIN& from) {
   if (!from.pw().empty()) {
     _internal_set_pw(from._internal_pw());
   }
+  if (from.is_bot() != 0) {
+    _internal_set_is_bot(from._internal_is_bot());
+  }
 }
 
 void C_LOGIN::CopyFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) {
@@ -857,6 +903,7 @@ void C_LOGIN::InternalSwap(C_LOGIN* other) {
       &pw_, GetArenaForAllocation(),
       &other->pw_, other->GetArenaForAllocation()
   );
+  swap(is_bot_, other->is_bot_);
 }
 
 ::PROTOBUF_NAMESPACE_ID::Metadata C_LOGIN::GetMetadata() const {

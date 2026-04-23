@@ -38,8 +38,14 @@ public:
 	 */
 	void DoEnter(uint64 PlayerID, std::shared_ptr<GameServerSession> Session, int32 TileX, int32 TileY, bool bFromPortal);
 
+	/** 로그인 경로용 — 외부에서 구성된 PlayerEntry(HP/위치 등 복원 상태 포함) 로 진입. */
+	void DoEnterWithState(PlayerEntry InitialEntry, std::shared_ptr<GameServerSession> Session);
+
 	/** Leave 내부 구현 — Job 직렬화 안에서 실행. */
 	void DoLeave(uint64 PlayerID);
+
+	/** Logout 경로 — 현재 PlayerEntry 를 DB 에 저장하고 Leave + AccountMap 에서 제거. */
+	void DoLogoutAndSave(uint64 PlayerID, std::string AccountId);
 
 	/**
 	 * 현재 Level 에서 플레이어 제거 + 몬스터 락온 해제 + S_PLAYER_LEFT 브로드캐스트까지 일괄 수행.

@@ -34,10 +34,15 @@ public:
 	DBSet(DBSet&&) = delete;
 	DBSet& operator=(DBSet&&) = delete;
 
-	bool Insert(const T& Row)              { return DBOrm::Insert<T>(Conn, Row); }
-	bool Find(uint64 PkValue, OUT T& Out)  { return DBOrm::Find<T>(Conn, PkValue, Out); }
-	bool Update(const T& Row)              { return DBOrm::Update<T>(Conn, Row); }
-	bool Delete(uint64 PkValue)            { return DBOrm::Delete<T>(Conn, PkValue); }
+	bool Insert(const T& Entity) { return DBOrm::Insert<T>(Conn, Entity); }
+	bool Update(const T& Entity) { return DBOrm::Update<T>(Conn, Entity); }
+
+	/** PK 타입은 DBOrm 의 PkT 확장 모델과 동일 — BIGINT/NVARCHAR/... 자동 분기. */
+	template<typename PkT>
+	bool Find(PkT PkValue, OUT T& Out) { return DBOrm::Find<T>(Conn, PkValue, Out); }
+
+	template<typename PkT>
+	bool Delete(PkT PkValue) { return DBOrm::Delete<T>(Conn, PkValue); }
 
 private:
 	DBConnection& Conn;

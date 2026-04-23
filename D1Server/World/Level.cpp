@@ -1,5 +1,8 @@
 #include "World/Level.h"
 
+#include "DB/DBConnection.h"
+#include "DB/DBContext.h"
+#include "DB/DBJobQueue.h"
 #include "Network/ClientPacketHandler.h"
 #include "Network/GameServerSession.h"
 #include "World/World.h"
@@ -7,6 +10,7 @@
 #include "Iocp/Session.h"
 
 #include <iostream>
+#include <utility>
 
 void Level::Init(const std::string& CollisionCsvPath, int32 InLevelID, const FPortalConfig& InPortalConfig)
 {
@@ -106,45 +110,48 @@ bool Level::CalculatePlayerTileByID(uint64 PlayerID, FTileNode& OutNode)
 
 void Level::DoEnter(uint64 PlayerID, std::shared_ptr<GameServerSession> Session, int32 TileX, int32 TileY, bool bFromPortal)
 {
-	// 스탯은 PlayerEntry 기본값(HP=20, MaxHP=20, AttackDamage=5, LastDir=DOWN)을 사용한다.
-	// 향후 캐릭터 클래스/장비에 따라 달라질 수 있도록 인스턴스 단위 보유.
+	// 디폴트 PlayerEntry 를 구성해 공통 DoEnterWithState 경로로 위임.
 	PlayerEntry NewEntry;
 	NewEntry.PlayerID = PlayerID;
 	NewEntry.TileX = TileX;
 	NewEntry.TileY = TileY;
-	NewEntry.Session = Session;
-	// 이동 속도는 레벨 공통 기본값으로 초기화 — 추후 캐릭터/장비/버프로 개별화 시 여기만 교체.
 	NewEntry.TileMoveSpeed = DefaultPlayerTileMoveSpeed;
-	// Portal 경유로 들어온 경우엔 다음 이동 시 Portal 트리거를 건너뛰기 위해 플래그를 set 한다.
 	NewEntry.bJustTeleported = bFromPortal;
-	// CharacterType 자동 배정 — PlayerID 해시로 3종(Default/Female/Dwarf) 에 분산.
-	// 결정론적이라 같은 PlayerID 는 항상 같은 캐릭터가 되며, DB 연동 이후엔 이 자리를 DB 로드 값으로 교체한다.
 	NewEntry.CharacterType = static_cast<Protocol::CharacterType>(PlayerID % 3);
 
-	// 기존 플레이어 스냅샷 수집 (자신 추가 전)
+	DoEnterWithState(std::move(NewEntry), std::move(Session));
+}
+
+void Level::DoEnterWithState(PlayerEntry InitialEntry, std::shared_ptr<GameServerSession> Session)
+{
+	// 세션 weak_ptr 연결 — 호출부가 책임지지 않도록 여기서 일괄 세팅.
+	InitialEntry.Session = Session;
+
+	const uint64 PlayerID = InitialEntry.PlayerID;
+	const int32 TileX = InitialEntry.TileX;
+	const int32 TileY = InitialEntry.TileY;
+	const Protocol::CharacterType CharType = InitialEntry.CharacterType;
+	const float MoveSpeed = InitialEntry.TileMoveSpeed;
+
+	// 기존 플레이어 스냅샷 수집 (자신 추가 전).
 	std::vector<PlayerEntry> Others;
 	Others.reserve(Players.size());
 	for (const auto& Pair : Players)
 		Others.push_back(Pair.second);
 
-	// 플레이어 등록
-	Players.emplace(PlayerID, std::move(NewEntry));
+	Players.emplace(PlayerID, std::move(InitialEntry));
 
 	std::cout << "[Level " << LevelID << "] Enter: id=" << PlayerID
-		<< " spawn=(" << TileX << "," << TileY << ")"
-		<< (bFromPortal ? " [portal]" : " [initial]")
-		<< " others=" << Others.size() << "\n";
+		<< " spawn=(" << TileX << "," << TileY << ") others=" << Others.size() << "\n";
 
-	// S_ENTER_GAME 응답 — 본인 + 기존 플레이어 + 몬스터
+	// S_ENTER_GAME 응답 — 본인 + 기존 플레이어 + 몬스터.
 	Protocol::S_ENTER_GAME EnterRes;
 	EnterRes.set_player_id(PlayerID);
 	EnterRes.set_tile_x(TileX);
 	EnterRes.set_tile_y(TileY);
 	EnterRes.set_room_id(static_cast<uint32>(LevelID));
-	// 클라가 동일한 쿨다운으로 로컬 입력을 강제하도록 서버 기준 TileMoveSpeed 를 실어 보낸다.
-	EnterRes.set_move_speed(DefaultPlayerTileMoveSpeed);
-	// 본인 CharacterType 은 위에서 NewEntry 에 기록한 값을 그대로 재사용.
-	EnterRes.set_character_type(static_cast<Protocol::CharacterType>(PlayerID % 3));
+	EnterRes.set_move_speed(MoveSpeed);
+	EnterRes.set_character_type(CharType);
 	for (const auto& Entry : Others)
 	{
 		Protocol::PlayerInfo* Info = EnterRes.add_others();
@@ -162,18 +169,45 @@ void Level::DoEnter(uint64 PlayerID, std::shared_ptr<GameServerSession> Session,
 	}
 	Session->Send(ClientPacketHandler::MakeSendBuffer(EnterRes));
 
-	// S_SPAWN 브로드캐스트 — 기존 접속자들에게 신규 입장자 알림
+	// S_SPAWN 브로드캐스트 — 기존 접속자들에게 신규 입장자 알림.
 	Protocol::S_SPAWN SpawnPkt;
 	SpawnPkt.set_player_id(PlayerID);
 	SpawnPkt.set_tile_x(TileX);
 	SpawnPkt.set_tile_y(TileY);
-	SpawnPkt.set_character_type(static_cast<Protocol::CharacterType>(PlayerID % 3));
+	SpawnPkt.set_character_type(CharType);
 	DoBroadcast(ClientPacketHandler::MakeSendBuffer(SpawnPkt), PlayerID);
 }
 
-void Level::DoLeave(uint64 PlayerID) 
-{ 
+void Level::DoLeave(uint64 PlayerID)
+{
     DoRemovePlayer(PlayerID);
+}
+
+void Level::DoLogoutAndSave(uint64 PlayerID, std::string AccountId)
+{
+	// 현재 Level.Players 에 있는 entry 가 로그아웃 시점의 진실. 스냅샷을 떠서 DB 워커로 넘긴다.
+	auto It = Players.find(PlayerID);
+	if (It != Players.end())
+	{
+		PlayerEntry Snapshot = It->second;
+		Snapshot.LevelID = LevelID; // 방어적 동기화.
+
+		DBJobQueue::GetInstance().Schedule([Snapshot](DBConnection& Conn) mutable
+		{
+			DBContext Ctx(Conn);
+			auto& PlayersDB = Ctx.Set<PlayerEntry>();
+			const bool bOk = PlayersDB.Update(Snapshot);
+			std::cout << "[DB] Logout save " << (bOk ? "OK" : "FAIL")
+				<< " PlayerID=" << Snapshot.PlayerID
+				<< " tile=(" << Snapshot.TileX << "," << Snapshot.TileY << ")"
+				<< " HP=" << Snapshot.HP << "/" << Snapshot.MaxHP << "\n";
+		});
+	}
+
+	DoRemovePlayer(PlayerID);
+
+	if (AccountId.empty() == false)
+		World::GetInstance().UnregisterAccount(AccountId);
 }
 
 void Level::DoRemovePlayer(uint64 PlayerID)

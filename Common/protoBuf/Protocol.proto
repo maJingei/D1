@@ -2,15 +2,25 @@ syntax = "proto3";
 
 package Protocol;
 
-// Client -> Server: Login request
+// 로그인 결과 코드. S_LOGIN.result 에 담겨 클라로 전달된다.
+enum ELoginResult {
+	LR_SUCCESS                = 0;
+	LR_INVALID_CREDENTIALS    = 1; // 기존 계정 + 틀린 비밀번호.
+	LR_ALREADY_LOGGED_IN      = 2; // 같은 Account.Id 로 활성 세션이 이미 존재.
+	LR_INVALID_REQUEST_FORMAT = 3; // id/pw 가 비었거나 NVARCHAR(32) 초과.
+	LR_DB_ERROR               = 4; // DB 쿼리 실패(연결/권한/스키마 이상).
+}
+
+// Client -> Server: Login request. is_bot=true 면 DB/중복 체크를 스킵하고 메모리 전용 세션으로 진입 (LoadBot 전용).
 message C_LOGIN {
 	string id = 1;
 	string pw = 2;
+	bool is_bot = 3;
 }
 
-// Server -> Client: Login response
+// Server -> Client: Login response. 성공 시 후속으로 S_ENTER_GAME 이 연속 전송된다(M4.5 경로).
 message S_LOGIN {
-	uint32 result  = 1;
+	uint32 result  = 1; // ELoginResult 값.
 	uint64 user_id = 2;
 }
 

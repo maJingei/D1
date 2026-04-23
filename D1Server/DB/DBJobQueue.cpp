@@ -18,7 +18,7 @@ void DBJobQueue::PushJob(JobRef&& Job)
 	DBQueue.Push(std::move(Job));
 }
 
-void DBJobQueue::Schedule(DBJobFn Fn)
+void DBJobQueue::Schedule(DBJobFn&& Fn)
 {
 	// Pool 에서 빌리고 실행 후 반납하는 고정 패턴을 Job 본체로 감싼다.
 	JobRef J = std::make_shared<Job>([Fn = std::move(Fn)]() mutable
