@@ -90,36 +90,39 @@ bool Handle_C_LOGIN(PacketSessionRef& session, Protocol::C_LOGIN& pkt)
 		auto& Accounts = Ctx.Set<Account>();
 		auto& Players = Ctx.Set<PlayerEntry>();
 
-		Account Acc;
-		const bool bFound = Accounts.Find(Id.c_str(), Acc);
+		// M5: DBSet<T>::Find 는 T* (nullptr = 행 없음) 반환. IdentityMap 이 소유, 여기서는 non-owning ptr.
+		Account* AccPtr = Accounts.Find(Id);
 
 		PlayerEntry Entry;
-		if (bFound)
+		if (AccPtr != nullptr)
 		{
 			// 기존 계정 — 비밀번호 검증 후 PlayerEntry 로드.
-			if (std::strcmp(Acc.Password, Pw.c_str()) != 0)
+			if (std::strcmp(AccPtr->Password, Pw.c_str()) != 0)
 			{
 				SendLoginResult(GameSession, Protocol::LR_INVALID_CREDENTIALS);
 				return;
 			}
-			if (Players.Find(static_cast<uint64>(Acc.PlayerID), Entry) == false)
+			PlayerEntry* EntryPtr = Players.Find(static_cast<uint64>(AccPtr->PlayerID));
+			if (EntryPtr == nullptr)
 			{
 				SendLoginResult(GameSession, Protocol::LR_DB_ERROR);
 				return;
 			}
+			// IdentityMap entry 는 람다 스코프에서 소멸 — 이후 세션 경로에 전달하려면 값 복사 1회.
+			Entry = *EntryPtr;
 		}
 		else
 		{
 			// 자동 가입 — PlayerID 발급, Account + PlayerEntry 쌍으로 insert.
 			const uint64 NewPlayerID = World::GetInstance().AllocNewPlayerID();
-			
-			// TODO : strncpy_s 이거는 나중에 고쳐보자 
-			strncpy_s(Acc.Id, Id.c_str(), Id.size());
-			strncpy_s(Acc.Password, Pw.c_str(), Pw.size());
-			
-			Acc.PlayerID = static_cast<int64>(NewPlayerID);
-			
-			if (Accounts.Insert(Acc) == false)
+
+			// TODO : strncpy_s 이거는 나중에 고쳐보자
+			Account NewAcc;
+			strncpy_s(NewAcc.Id, Id.c_str(), Id.size());
+			strncpy_s(NewAcc.Password, Pw.c_str(), Pw.size());
+			NewAcc.PlayerID = static_cast<int64>(NewPlayerID);
+
+			if (Accounts.Insert(NewAcc) == false)
 			{
 				SendLoginResult(GameSession, Protocol::LR_DB_ERROR);
 				return;

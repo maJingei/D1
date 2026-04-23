@@ -6,6 +6,7 @@
 #include "DB/DBStatement.h"
 
 #include <string>
+#include <type_traits>
 
 /** 메타데이터 기반 템플릿 CRUD 파사드 (M4). 새 PK 타입은 DBOrmDetail::BindParamPk 오버로드만 추가. */
 class DBOrm
@@ -149,6 +150,17 @@ namespace DBOrmDetail
 			static_cast<SQLLEN>(PkCol.Size),
 			static_cast<SQLLEN>(PkCol.Length),
 			&Storage.NtsInd);
+	}
+
+	/** M5 IdentityMap 키로 std::string/std::wstring 을 쓰는 엔티티 (Account 등) 지원 — 기존 C-string 오버로드로 위임. */
+	inline bool BindParamPk(DBStatement& Stmt, SQLUSMALLINT ParamIndex, const ColumnMeta& PkCol, const std::string& PkValue, PkBindStorage& Storage)
+	{
+		return BindParamPk(Stmt, ParamIndex, PkCol, PkValue.c_str(), Storage);
+	}
+
+	inline bool BindParamPk(DBStatement& Stmt, SQLUSMALLINT ParamIndex, const ColumnMeta& PkCol, const std::wstring& PkValue, PkBindStorage& Storage)
+	{
+		return BindParamPk(Stmt, ParamIndex, PkCol, PkValue.c_str(), Storage);
 	}
 }
 

@@ -12,7 +12,7 @@
  * 소비해 자동 바인딩한다.
  *
  * 사용 예 (M5):
- *   DB_REGISTER_TABLE_BEGIN(PlayerEntry, "dbo.PlayerEntry")
+ *   DB_REGISTER_TABLE_BEGIN(PlayerEntry, "dbo.PlayerEntry", uint64)
  *       DB_COLUMN_PK(PlayerID, BIGINT)
  *       DB_COLUMN(CharacterType, INT)
  *       DB_COLUMN_NULL(NickName, NVARCHAR(32))
@@ -20,6 +20,10 @@
  *       DB_COLUMN_NULL(LastLoginAt, DATETIME2(3))
  *       DB_COLUMN_NULL(AvatarHash, VARBINARY(32))
  *   DB_REGISTER_TABLE_END()
+ *
+ * 세 번째 인자 PkTypeSpec (M5 IdentityMap 신규): TableMetadata<T>::PkType 로 노출된다.
+ * BIGINT → uint64, VARCHAR(N) → std::string, NVARCHAR(N) → std::wstring 규약.
+ * DBSet<T> 가 IdentityMap 키 타입으로 직접 소비한다.
  *
  * NULL 가능 컬럼은 Row 안에 SQLLEN <FieldName>_Ind 슬롯을 함께 선언해야 한다 — 매크로가
  * offsetof(Row, FieldName##_Ind) 로 자동 추정. 컨벤션 위반 시 컴파일 에러로 즉시 잡힘.
@@ -168,14 +172,16 @@ constexpr const TableMetadata<T>& GetTableMetadata()
 
 /**
  * TableMetadata<TypeName> 특수화 헤더를 연다. TableStr 은 SQL 테이블 풀네임 문자열 리터럴.
+ * PkTypeSpec 은 M5 IdentityMap 키 타입 — BIGINT=uint64, VARCHAR=std::string, NVARCHAR=std::wstring.
  * 본 매크로 사이 DB_COLUMN / DB_COLUMN_PK / DB_COLUMN_NULL 을 나열하고
  * DB_REGISTER_TABLE_END() 로 닫는다.
  */
-#define DB_REGISTER_TABLE_BEGIN(TypeName, TableStr)                  \
+#define DB_REGISTER_TABLE_BEGIN(TypeName, TableStr, PkTypeSpec)      \
 	template<>                                                       \
 	struct TableMetadata<TypeName>                                   \
 	{                                                                \
 		using Row = TypeName;                                        \
+		using PkType = PkTypeSpec;                                   \
 		static constexpr const char* TableName = TableStr;           \
 		static constexpr ColumnMeta Columns[] = {
 

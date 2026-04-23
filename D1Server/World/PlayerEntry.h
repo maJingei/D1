@@ -107,7 +107,7 @@ struct PlayerEntry
 // 런타임 필드(bIsDead 등) 는 여기에 등록되지 않아 자연스럽게 제외된다.
 // ============================================================
 
-DB_REGISTER_TABLE_BEGIN(PlayerEntry, "dbo.PlayerEntry")
+DB_REGISTER_TABLE_BEGIN(PlayerEntry, "dbo.PlayerEntry", uint64)
 	DB_COLUMN_PK(PlayerID, BIGINT)
 	DB_COLUMN(CharacterType, INT)
 	DB_COLUMN(LevelID, INT)

@@ -97,125 +97,56 @@ bool ServerEngine::Init()
 			<< " Server=" << ServerName << std::endl;
 	});
 
-	// M4.5 부터 실제 로그인 경로가 PlayerEntry 를 건드리므로, 고정 PlayerID=1 로 덮어쓰는 smoke 테스트는
-	// 실행 시 real account 의 행을 지워버릴 위험이 있어 주석 처리. DB 라운드트립 검증은 SELECT DB_NAME()
-	// smoke 만으로 충분.
-#if 0
-	static constexpr uint64 kSmokePlayerID = 1;
+	// M5 IdentityMap 검증 smoke — 실제 로그인 PlayerID 와 충돌 않게 전용 9999 사용.
+	// DONE 기준: 동일 DBContext 안에서 같은 PK 로 Find 2회 시, 2번째 호출이 DB 왕복 없이
+	// [DBIdMap] HIT 로그를 찍고 1번째 호출과 동일한 ptr 을 반환한다.
+	static constexpr uint64 kSmokePlayerID = 9999;
 	DBJobQueue::GetInstance().Schedule([](DBConnection& Conn)
 	{
 		DBContext Ctx(Conn);
 		auto& Players = Ctx.Set<PlayerEntry>();
 
-		// 캐시 동작 임시 검증 — 같은 타입의 Set 두 번 요청 시 같은 인스턴스 반환되어야 한다.
-		// (M8 Identity Map 일관성의 전제. 본 마일스톤 한정 검증, 다음 단계에서 제거 예정)
+		// DBContext::Set 캐시 자체 검증 — 같은 타입 2회 요청 시 동일 인스턴스. IdentityMap 일관성의 전제.
 		auto& PlayersAgain = Ctx.Set<PlayerEntry>();
-		assert(&Players == &PlayersAgain);
+		const bool bSetCacheOk = (&Players == &PlayersAgain);
+		std::cout << "[DBIdMap/Smoke] Set<T> cache " << (bSetCacheOk ? "OK" : "FAIL (different instances)") << std::endl;
 
-		// M5 신규 5종 컬럼 라운드트립 검증용 람다. NULL/비-NULL 모두 같은 포맷으로 출력.
-		auto LogM5Cols = [](const char* Tag, const PlayerEntry& E)
-		{
-			std::cout << "[DBContext]   " << Tag
-				<< " IsAdmin=" << static_cast<int>(E.IsAdmin)
-				<< " Reputation=" << E.Reputation
-				<< " NickName_Ind=" << E.NickName_Ind
-				<< " LastLoginAt_Ind=" << E.LastLoginAt_Ind
-				<< " AvatarHash_Ind=" << E.AvatarHash_Ind;
-			if (E.LastLoginAt_Ind != SQL_NULL_DATA)
-			{
-				std::cout << " LastLoginAt=" << E.LastLoginAt.year << "-" << E.LastLoginAt.month
-					<< "-" << E.LastLoginAt.day << " " << E.LastLoginAt.hour << ":"
-					<< E.LastLoginAt.minute << ":" << E.LastLoginAt.second
-					<< "." << (E.LastLoginAt.fraction / 1000000);
-			}
-			if (E.AvatarHash_Ind != SQL_NULL_DATA)
-				std::cout << " AvatarHash[0..3]=" << static_cast<int>(E.AvatarHash[0]) << "/" << static_cast<int>(E.AvatarHash[1]) << "/" << static_cast<int>(E.AvatarHash[2]) << "/" << static_cast<int>(E.AvatarHash[3]);
-			std::cout << std::endl;
-		};
+		// 전용 9999 행이 이전 실행에서 남아있을 수 있으므로 선삭제 — idempotent 보장.
+		Players.Delete(kSmokePlayerID);
 
-		// 초기 행 템플릿. Insert 가 실패(PK 중복)해도 후속 Find/Update/Delete 는 이어간다.
-		// 새 5종 컬럼은 PlayerEntry 디폴트 그대로 — NULL 가능 셋(NickName/LastLoginAt/AvatarHash)은
-		// _Ind=SQL_NULL_DATA 라 NULL 저장, NOT NULL 둘(IsAdmin/Reputation)은 0.
-		PlayerEntry Entry;
-		Entry.PlayerID = kSmokePlayerID;
-		Entry.CharacterType = Protocol::CT_DEFAULT;
-		Entry.LevelID = 0;
-		Entry.TileX = 5;
-		Entry.TileY = 7;
-		Entry.HP = 20;
-		Entry.MaxHP = 20;
-		Entry.AttackDamage = 5;
-		Entry.TileMoveSpeed = 6.0f;
+		// Seed 행 — NOT NULL 컬럼 기본값만 채운다. NULL 가능 셋은 _Ind=SQL_NULL_DATA 디폴트 유지.
+		PlayerEntry Seed;
+		Seed.PlayerID = kSmokePlayerID;
+		Seed.CharacterType = Protocol::CT_DEFAULT;
+		Seed.LevelID = 0;
+		Seed.TileX = 5;
+		Seed.TileY = 7;
+		Seed.HP = 20;
+		Seed.MaxHP = 20;
+		Seed.AttackDamage = 5;
+		Seed.TileMoveSpeed = 6.0f;
+		const bool bInserted = Players.Insert(Seed);
+		std::cout << "[DBIdMap/Smoke] Insert " << (bInserted ? "OK" : "FAIL") << " (PlayerID=" << kSmokePlayerID << ")" << std::endl;
+		if (bInserted == false) return;
 
-		// (1) Insert — PK 중복이어도 진단 로그만 남기고 계속 진행.
-		if (Players.Insert(Entry))
-			std::cout << "[DBContext] Insert OK (PlayerID=" << kSmokePlayerID << ")" << std::endl;
-		else
-			std::cout << "[DBContext] Insert skipped (already exists or failed, continuing)" << std::endl;
+		// Find #1 — IdentityMap 비어있음 → [DBIdMap] MISS + DB SELECT 1회.
+		PlayerEntry* First = Players.Find(kSmokePlayerID);
+		std::cout << "[DBIdMap/Smoke] Find#1 result ptr=" << static_cast<void*>(First) << " TileX=" << (First ? First->TileX : -1) << std::endl;
+		if (First == nullptr) return;
 
-		// (2) Find #1 — Insert 성공/기존 행 둘 다 여기서 값을 확인. NULL 시나리오 검증.
-		PlayerEntry Loaded;
-		if (Players.Find(kSmokePlayerID, Loaded) == false)
-		{
-			std::cout << "[DBContext] Find FAIL (PlayerID=" << kSmokePlayerID << ")" << std::endl;
-			return;
-		}
-		std::cout << "[DBContext] Find OK (PlayerID=" << Loaded.PlayerID
-			<< ", LevelID=" << Loaded.LevelID
-			<< ", TileX=" << Loaded.TileX
-			<< ", TileY=" << Loaded.TileY
-			<< ", HP=" << Loaded.HP << "/" << Loaded.MaxHP << ")" << std::endl;
-		LogM5Cols("[NULL phase]", Loaded);
+		// Find #2 — 동일 DBContext 내 중복 호출. DB 왕복 0회 + [DBIdMap] HIT 관측 + First 와 동일 ptr 반환.
+		PlayerEntry* Second = Players.Find(kSmokePlayerID);
+		const bool bIdentityOk = (First == Second);
+		std::cout << "[DBIdMap/Smoke] Find#2 result ptr=" << static_cast<void*>(Second) << " identity=" << (bIdentityOk ? "OK (same ptr)" : "FAIL (different ptr)") << std::endl;
 
-		// (3) Update — 위치/HP + M5 신규 5종 컬럼 모두 비-NULL 값으로 set.
-		Loaded.TileX = 13;
-		Loaded.TileY = 21;
-		Loaded.HP = 9;
+		// Delete — DB 행 + 맵 entry 동시 제거. 이후 Find 는 다시 MISS 여야 한다.
+		const bool bDeleted = Players.Delete(kSmokePlayerID);
+		std::cout << "[DBIdMap/Smoke] Delete " << (bDeleted ? "OK" : "FAIL") << " (PlayerID=" << kSmokePlayerID << ")" << std::endl;
 
-		// 새 5종 컬럼 set (라운드트립 검증). 한국어 회피 — narrow 로그 채널 호환.
-		const wchar_t kNick[] = L"TestUser";
-		std::memcpy(Loaded.NickName, kNick, sizeof(kNick));
-		Loaded.NickName_Ind = SQL_NTS;
-
-		Loaded.IsAdmin = 1;
-
-		// 고정 datetime — 매번 같은 값이라 라운드트립 비교가 쉽다.
-		Loaded.LastLoginAt = SQL_TIMESTAMP_STRUCT{2026, 4, 22, 12, 34, 56, 789000000};
-		Loaded.LastLoginAt_Ind = sizeof(SQL_TIMESTAMP_STRUCT);
-
-		Loaded.Reputation = -42;
-
-		std::memset(Loaded.AvatarHash, 0xAA, sizeof(Loaded.AvatarHash));
-		Loaded.AvatarHash_Ind = sizeof(Loaded.AvatarHash);
-
-		if (Players.Update(Loaded) == false)
-		{
-			std::cout << "[DBContext] Update FAIL (PlayerID=" << kSmokePlayerID << ")" << std::endl;
-			return;
-		}
-		std::cout << "[DBContext] Update OK (PlayerID=" << kSmokePlayerID << ")" << std::endl;
-
-		// (4) Find #2 — Update 가 영속화되었는지 SELECT 로 재검증. 비-NULL 시나리오.
-		PlayerEntry Reloaded;
-		if (Players.Find(kSmokePlayerID, Reloaded) == false)
-		{
-			std::cout << "[DBContext] Find(after Update) FAIL" << std::endl;
-			return;
-		}
-		std::cout << "[DBContext] Find OK (PlayerID=" << Reloaded.PlayerID
-			<< ", LevelID=" << Reloaded.LevelID
-			<< ", TileX=" << Reloaded.TileX
-			<< ", TileY=" << Reloaded.TileY
-			<< ", HP=" << Reloaded.HP << "/" << Reloaded.MaxHP << ")" << std::endl;
-		LogM5Cols("[NotNull phase]", Reloaded);
-
-		// (5) Delete — smoke 를 idempotent 하게 종료해 다음 부팅에서도 Insert 부터 다시 시작 가능하게 한다.
-		if (Players.Delete(kSmokePlayerID))
-			std::cout << "[DBContext] Delete OK (PlayerID=" << kSmokePlayerID << ")" << std::endl;
-		else
-			std::cout << "[DBContext] Delete FAIL (PlayerID=" << kSmokePlayerID << ")" << std::endl;
+		// Find #3 — 삭제 후 재조회. 맵에서 erase 됐으므로 MISS, DB 에도 행이 없으므로 nullptr.
+		PlayerEntry* Third = Players.Find(kSmokePlayerID);
+		std::cout << "[DBIdMap/Smoke] Find#3 result ptr=" << static_cast<void*>(Third) << " expected=nullptr" << std::endl;
 	});
-#endif
 
 	// M4 smoke — 매크로 기반 메타데이터 / Build SQL 결과(? 플레이스홀더)를 main 스레드에서 한 번 덤프한다.
 	// DB 워커를 타지 않는 메모리 전용 결과물이므로 Schedule 없이 직접 출력.
