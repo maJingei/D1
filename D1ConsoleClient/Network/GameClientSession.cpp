@@ -1,15 +1,23 @@
 #include "GameClientSession.h"
-
 #include "Iocp/Session.h"
 #include "Iocp/PacketSession.h"
-
 #include "Network/ServerPacketHandler.h"
+#include <windows.h>
 
 void GameClientSession::OnConnected()
 {
-	// 베이스가 RegisterRecv 를 돌려주므로 먼저 수신 대기를 시작시킨 뒤, 바로 EnterGame 요청 패킷을 올려 보낸다.
+	// 접속 완료 후 env 가 둘 다 세팅된 경우에만 자동 C_LOGIN.
+	// env 미설정 시에는 ULoginWidget 이 사용자 입력을 기다렸다가 SendLoginPacket(id, pw) 를 직접 호출한다.
 	Session::OnConnected();
-	SendEnterGamePacket();
+
+	char IdBuf[64] = {};
+	char PwBuf[64] = {};
+	const DWORD IdLen = ::GetEnvironmentVariableA("D1_LOGIN_ID", IdBuf, sizeof(IdBuf));
+	const DWORD PwLen = ::GetEnvironmentVariableA("D1_LOGIN_PW", PwBuf, sizeof(PwBuf));
+	if (IdLen == 0 || IdLen >= sizeof(IdBuf)) return;
+	if (PwLen == 0 || PwLen >= sizeof(PwBuf)) return;
+
+	SendLoginPacket(std::string(IdBuf), std::string(PwBuf));
 }
 
 void GameClientSession::OnRecvPacket(BYTE* Buffer, int32 Len)
@@ -20,12 +28,12 @@ void GameClientSession::OnRecvPacket(BYTE* Buffer, int32 Len)
 
 void GameClientSession::OnSend(int32 /*NumOfBytes*/)
 {
-	// 클라이언트에서는 송신 완료 로그를 생략한다.
 }
 
-void GameClientSession::SendEnterGamePacket()
+void GameClientSession::SendLoginPacket(const std::string& Id, const std::string& Pw)
 {
-	// C_ENTER_GAME 은 현 스코프에서 빈 payload. 서버가 Session 기반으로 PlayerID/스폰 좌표를 발급한다.
-	Protocol::C_ENTER_GAME pkt;
-	Send(ServerPacketHandler::MakeSendBuffer(pkt));
+	Protocol::C_LOGIN Pkt;
+	Pkt.set_id(Id);
+	Pkt.set_pw(Pw);
+	Send(ServerPacketHandler::MakeSendBuffer(Pkt));
 }

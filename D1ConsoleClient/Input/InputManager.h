@@ -2,6 +2,8 @@
 
 #include "Core/CoreMinimal.h"
 
+#include <vector>
+
 #include "Core/CoreMinimal.h"
 
 /** 자주 사용하는 키보드 키를 가독성 있게 매핑한 enum. */
@@ -65,6 +67,18 @@ public:
 	/** WndProc WM_KILLFOCUS 에서 호출 — 포커스 이탈 시 stuck-key 방지를 위해 모든 키 상태를 초기화한다. */
 	void ResetAllKeys();
 
+	/** WndProc WM_CHAR 에서 호출 — 이번 프레임의 문자 입력 버퍼에 append. UTextField 가 Tick 에서 소비. */
+	void OnChar(wchar_t Char);
+
+	/** WndProc WM_LBUTTONDOWN 에서 호출 — 클라이언트 좌표의 마우스 다운을 기록. ULoginWidget 이 Tick 에서 소비. */
+	void OnMouseDown(int32 X, int32 Y);
+
+	/** 이번 프레임에 들어온 문자 입력 목록. Update() 가 매 프레임 시작 시 clear 한다. */
+	const std::vector<wchar_t>& GetCharBuffer() const { return CharBuffer; }
+
+	/** 이번 프레임에 마우스 좌클릭이 있었는지. true 면 OutX/OutY 에 클라이언트 좌표 반환. */
+	bool ConsumeMouseDown(int32& OutX, int32& OutY);
+
 	/** 현재 프레임에 키가 눌려 있는지 */
 	bool GetKey(uint8 KeyCode) const { return CurrentKeyStates[KeyCode]; }
 
@@ -91,4 +105,12 @@ private:
 	bool CurrentKeyStates[KEY_COUNT] = {};
 	bool PreviousKeyStates[KEY_COUNT] = {};
 	POINT MousePosition = {};
+
+	/** WM_CHAR 로 들어온 프레임 내 문자 목록. Update() 가 매 프레임 시작 시 clear 한다. */
+	std::vector<wchar_t> CharBuffer;
+
+	/** WM_LBUTTONDOWN 좌표. bHasPendingClick = true 인 동안 유효. ConsumeMouseDown 에서 false 로 초기화. */
+	int32 PendingClickX = 0;
+	int32 PendingClickY = 0;
+	bool bHasPendingClick = false;
 };

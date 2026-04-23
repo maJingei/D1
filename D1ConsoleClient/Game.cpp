@@ -20,6 +20,8 @@
 #include "Iocp/NetAddress.h"
 #include "Iocp/IocpCore.h"
 
+#include "UI/ULoginWidget.h"
+
 // 전역 Game 접근점. Packet Handler가 World/Debug 버퍼에 접근하기 위한 통로.
 Game* Game::Instance = nullptr;
 
@@ -155,11 +157,17 @@ void Game::Run()
 		// 3. 게임 로직 업데이트
 		Tick(TimeManager::Get().GetDeltaTime());
 		
-		// 4. 렌더 진행
+		// 4. 렌더 진행 — Scene 분기. Login 상태에서는 World 가 완전히 그려지지 않고 ULoginWidget 만.
 		Renderer::Get().BeginRender();
-		if (World != nullptr)
+		if (CurrentState == EGameState::InGame)
 		{
-			World->Render(Renderer::Get().GetBackBufferDC());
+			if (World != nullptr)
+				World->Render(Renderer::Get().GetBackBufferDC());
+		}
+		else // EGameState::Login
+		{
+			if (LoginWidget != nullptr)
+				LoginWidget->Render(Renderer::Get().GetBackBufferDC(), 0, 0);
 		}
 		// 디버그 오버레이 — 월드 위에, 화면 합성 전에 그린다.
 		{
@@ -208,28 +216,42 @@ void Game::BeginPlay()
 
 	// 3. 월드 생성
 	World = std::make_unique<UWorld>();
-	
+
+	// 3.5 로그인 위젯 생성 — env(D1_LOGIN_ID/PW) 둘 다 설정된 경우에만 숨기고 OnConnected 에서 자동 로그인.
+	//     env 없으면 기본 Visible(true) 상태로 사용자 입력 대기.
+	LoginWidget = std::make_unique<ULoginWidget>();
+	{
+		char IdBuf[64] = {};
+		char PwBuf[64] = {};
+		const DWORD IdLen = ::GetEnvironmentVariableA("D1_LOGIN_ID", IdBuf, sizeof(IdBuf));
+		const DWORD PwLen = ::GetEnvironmentVariableA("D1_LOGIN_PW", PwBuf, sizeof(PwBuf));
+		const bool bEnvPresent = (IdLen > 0 && IdLen < sizeof(IdBuf)) && (PwLen > 0 && PwLen < sizeof(PwBuf));
+		if (bEnvPresent)
+			LoginWidget->SetVisible(false);
+	}
+
 	// 4. 리소스 로드 시작
 	// TODO : 이것도 지금 책임 소재가 Game에 있을게 아니라 ResourceManager의 싱글톤으로 진행되어야 할 것. 다만 World를 소유하고 있지 않으므로 고민해볼 것
 	LoadResources();
-
-	// 5. 플레이어 액터는 여기서 스폰하지 않는다.
-	//    서버가 S_ENTER_GAME 응답을 보낼 때 좌표를 지정해주므로,
-	//    ServerPacketHandler::Handle_S_ENTER_GAME 에서 World->SpawnActor<APlayerActor> 를 수행한다.
-
-	// 6. 몬스터 스폰은 서버 권위 — S_MONSTER_SPAWN 패킷 수신 시 ServerPacketHandler 에서 처리한다.
 }
 
 void Game::Tick(float DeltaTime)
 {
-	if (World != nullptr)
+	// Scene 분기 — Login 일 땐 World 를 Tick 하지 않아 몬스터/플레이어 액터 상태가 멈춘다.
+	if (CurrentState == EGameState::InGame)
 	{
-		World->Tick(DeltaTime);
+		if (World != nullptr)
+			World->Tick(DeltaTime);
+	}
+	else // EGameState::Login
+	{
+		if (LoginWidget != nullptr)
+			LoginWidget->Tick(DeltaTime);
 	}
 
 	if (Network == nullptr) return;
-	
-	// 이번 프레임에 도착한 IOCP 완료를 모두 소비한다 (비차단).
+
+	// IOCP 완료는 State 와 무관하게 매 프레임 드레인 — Connect 직후 S_LOGIN 이 이 경로로 도착.
 	// Dispatch는 1건 처리마다 반환하므로 루프로 드레인한다.
 	while (Network->GetIocpCore()->Dispatch(0))
 	{
@@ -240,6 +262,7 @@ void Game::Tick(float DeltaTime)
 void Game::EndPlay()
 {
 	World.reset();
+	LoginWidget.reset();
 
 	if (Network != nullptr)
 	{
@@ -334,6 +357,14 @@ LRESULT CALLBACK Game::WndProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam
 		return 0;
 	case WM_KEYUP:
 		InputManager::Get().OnKeyUp(static_cast<uint8>(wParam));
+		return 0;
+	case WM_CHAR:
+		// WM_CHAR 는 TranslateMessage 가 WM_KEYDOWN 을 변환해서 발행. wParam 은 UTF-16 코드포인트.
+		InputManager::Get().OnChar(static_cast<wchar_t>(wParam));
+		return 0;
+	case WM_LBUTTONDOWN:
+		// LOWORD=X, HIWORD=Y, 클라이언트 좌표계.
+		InputManager::Get().OnMouseDown(static_cast<int32>(LOWORD(lParam)), static_cast<int32>(HIWORD(lParam)));
 		return 0;
 	case WM_KILLFOCUS:
 		InputManager::Get().ResetAllKeys();

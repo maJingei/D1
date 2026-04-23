@@ -193,6 +193,10 @@
     <ClCompile Include="Render\Texture.cpp" />
     <ClCompile Include="Render\ResourceManager.cpp" />
     <ClCompile Include="UI\UHealthBarWidget.cpp" />
+    <ClCompile Include="UI\UTextField.cpp" />
+    <ClCompile Include="UI\UPasswordField.cpp" />
+    <ClCompile Include="UI\UButton.cpp" />
+    <ClCompile Include="UI\ULoginWidget.cpp" />
     <ClCompile Include="World\UWorld.cpp" />
     <ClCompile Include="World\UTileMap.cpp" />
     <ClCompile Include="$(SolutionDir)Common\UCollisionMap.cpp" />
@@ -219,6 +223,10 @@
     <ClInclude Include="Render\ResourceManager.h" />
     <ClInclude Include="UI\UWidget.h" />
     <ClInclude Include="UI\UHealthBarWidget.h" />
+    <ClInclude Include="UI\UTextField.h" />
+    <ClInclude Include="UI\UPasswordField.h" />
+    <ClInclude Include="UI\UButton.h" />
+    <ClInclude Include="UI\ULoginWidget.h" />
     <ClInclude Include="World\UWorld.h" />
     <ClInclude Include="World\UTileMap.h" />
     <ClInclude Include="$(SolutionDir)Common\UCollisionMap.h" />

@@ -12,6 +12,17 @@
 class ClientService;
 class Session;
 class UWorld;
+class ULoginWidget;
+
+/**
+ * 클라이언트 상위 Scene 상태. Login 에서는 World 를 Tick/Render 하지 않고 ULoginWidget 만 렌더한다.
+ * 향후 Lobby, CharacterSelect 확장 시 enum 값을 추가한다.
+ */
+enum class EGameState : uint8
+{
+	Login = 0,
+	InGame = 1,
+};
 
 /** 게임 클라이언트의 메인 객체. */
 class Game
@@ -48,6 +59,13 @@ public:
 	/** 서버에 연결된 세션. Packet 송신이 필요한 액터가 직접 접근한다. 미연결이면 nullptr. */
 	const SessionRef& GetClientSession() const { return ClientSession; }
 
+	/** 현 Scene 상태. 기본 Login, LR_SUCCESS 수신 시 InGame 으로 전환된다. */
+	EGameState GetCurrentState() const { return CurrentState; }
+	void SetCurrentState(EGameState InState) { CurrentState = InState; }
+
+	/** 로그인 위젯. Handle_S_LOGIN 이 ShowError/SetVisible 을 호출한다. */
+	ULoginWidget* GetLoginWidget() const { return LoginWidget.get(); }
+
 private:
 
 	void BeginPlay();
@@ -77,6 +95,12 @@ private:
 
 	/** 게임 오브젝트를 소유하고 Tick/Render를 위임하는 월드. 맵 교체 시 재할당된다. */
 	std::unique_ptr<UWorld> World;
+
+	/** 현재 Scene 상태. 기본 Login. LR_SUCCESS 수신 시 InGame 으로 전이. */
+	EGameState CurrentState = EGameState::Login;
+
+	/** Login 상태 전용 전체화면 로그인 위젯. BeginPlay 에서 생성. */
+	std::unique_ptr<ULoginWidget> LoginWidget;
 
 	/** 전역 접근용 정적 포인터. Initialize에서 this 등록, Shutdown에서 nullptr 복원. */
 	static Game* Instance;

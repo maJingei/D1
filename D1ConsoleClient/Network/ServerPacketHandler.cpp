@@ -5,6 +5,7 @@
 #include "GameObject/APlayerFemaleActor.h"
 #include "GameObject/APlayerDwarfActor.h"
 #include "GameObject/AMonsterActor.h"
+#include "UI/ULoginWidget.h"
 
 #include <cstdio>
 #include <cwchar>
@@ -69,10 +70,50 @@ bool Handle_INVALID(PacketSessionRef& /*session*/, BYTE* buffer, int32 /*len*/)
 
 bool Handle_S_LOGIN(PacketSessionRef& /*session*/, Protocol::S_LOGIN& pkt)
 {
-	if (pkt.result() == 0)
+	// ELoginResult 분기 — 성공 시 Scene 전환, 실패 시 LoginWidget 에 에러 메시지 표시 + 재시도 허용.
+	Game* G = Game::GetInstance();
+	ULoginWidget* Widget = (G != nullptr) ? G->GetLoginWidget() : nullptr;
+
+	switch (pkt.result())
+	{
+	case Protocol::LR_SUCCESS:
 		ScreenLog(L"[Client] LOGIN success: userId=%llu", pkt.user_id());
-	else
+		if (G != nullptr)
+			G->SetCurrentState(EGameState::InGame);
+		if (Widget != nullptr)
+			Widget->SetVisible(false);
+		break;
+
+	case Protocol::LR_INVALID_CREDENTIALS:
+		ScreenLog(L"[Client] LOGIN failed: invalid credentials");
+		if (Widget != nullptr)
+			Widget->ShowError(L"ID 또는 비밀번호가 올바르지 않습니다.");
+		break;
+
+	case Protocol::LR_ALREADY_LOGGED_IN:
+		ScreenLog(L"[Client] LOGIN failed: already logged in");
+		if (Widget != nullptr)
+			Widget->ShowError(L"이미 로그인된 계정입니다.");
+		break;
+
+	case Protocol::LR_INVALID_REQUEST_FORMAT:
+		ScreenLog(L"[Client] LOGIN failed: invalid request format");
+		if (Widget != nullptr)
+			Widget->ShowError(L"ID/비밀번호 형식이 잘못되었습니다.");
+		break;
+
+	case Protocol::LR_DB_ERROR:
+		ScreenLog(L"[Client] LOGIN failed: DB error");
+		if (Widget != nullptr)
+			Widget->ShowError(L"서버 오류가 발생했습니다.");
+		break;
+
+	default:
 		ScreenLog(L"[Client] LOGIN failed: result=%u", pkt.result());
+		if (Widget != nullptr)
+			Widget->ShowError(L"알 수 없는 로그인 오류입니다.");
+		break;
+	}
 	return true;
 }
 
