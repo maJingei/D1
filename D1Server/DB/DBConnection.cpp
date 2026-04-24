@@ -3,6 +3,8 @@
 
 #include <iostream>
 
+#include "DBContext.h"
+
 DBConnection::DBConnection(SQLHENV InHenv)
 {
 	// HENV 아래 HDBC 를 할당. Pool 이 HENV 소유권을 갖고 있으므로 여기서는 할당만 수행.
@@ -32,10 +34,10 @@ bool DBConnection::Connect(const wchar_t* ConnectString)
 	const SQLRETURN Ret = ::SQLDriverConnectW(
 		Hdbc,
 		nullptr,
-		reinterpret_cast<SQLWCHAR*>(const_cast<wchar_t*>(ConnectString)),
+		(const_cast<wchar_t*>(ConnectString)),
 		SQL_NTS,
 		OutConnectionString,
-		static_cast<SQLSMALLINT>(sizeof(OutConnectionString) / sizeof(SQLWCHAR)),
+		(sizeof(OutConnectionString) / sizeof(SQLWCHAR)),
 		&OutConnectionStringLength,
 		SQL_DRIVER_NOPROMPT);
 
@@ -59,6 +61,49 @@ bool DBConnection::Execute(const wchar_t* Sql)
 		return false;
 
 	return Stmt.ExecuteDirect(Sql);
+}
+
+bool DBConnection::BeginTransaction()
+{
+	if (Hdbc == SQL_NULL_HDBC)
+		return false;
+
+	// Autocommit 을 OFF 로 내리는 순간 이후 SQL 들이 한 트랜잭션으로 묶인다.
+	const SQLRETURN Ret = ::SQLSetConnectAttr(Hdbc, SQL_ATTR_AUTOCOMMIT, (SQL_AUTOCOMMIT_OFF), SQL_IS_INTEGER);
+	if (SQL_SUCCEEDED(Ret) == false)
+	{
+		HandleError(Hdbc, SQL_HANDLE_DBC, L"BeginTransaction(SetAttr AUTOCOMMIT OFF)");
+		return false;
+	}
+	return true;
+}
+
+bool DBConnection::CommitTransaction()
+{
+	if (Hdbc == SQL_NULL_HDBC)
+		return false;
+
+	const SQLRETURN Ret = ::SQLEndTran(SQL_HANDLE_DBC, Hdbc, SQL_COMMIT);
+	
+	if (SQL_SUCCEEDED(Ret) == false)
+		HandleError(Hdbc, SQL_HANDLE_DBC, L"CommitTransaction(SQLEndTran COMMIT)");
+
+	// 성공·실패와 무관하게 autocommit 복원 — connection 이 Pool 로 돌아갈 때 다음 Job 이 기본 모드를 기대한다.
+	::SQLSetConnectAttr(Hdbc, SQL_ATTR_AUTOCOMMIT, reinterpret_cast<SQLPOINTER>(SQL_AUTOCOMMIT_ON), SQL_IS_INTEGER);
+	return SQL_SUCCEEDED(Ret);
+}
+
+bool DBConnection::RollbackTransaction()
+{
+	if (Hdbc == SQL_NULL_HDBC)
+		return false;
+
+	const SQLRETURN Ret = ::SQLEndTran(SQL_HANDLE_DBC, Hdbc, SQL_ROLLBACK);
+	if (SQL_SUCCEEDED(Ret) == false)
+		HandleError(Hdbc, SQL_HANDLE_DBC, L"RollbackTransaction(SQLEndTran ROLLBACK)");
+
+	::SQLSetConnectAttr(Hdbc, SQL_ATTR_AUTOCOMMIT, reinterpret_cast<SQLPOINTER>(SQL_AUTOCOMMIT_ON), SQL_IS_INTEGER);
+	return SQL_SUCCEEDED(Ret);
 }
 
 void DBConnection::Disconnect()
@@ -113,7 +158,7 @@ void DBConnection::HandleError(SQLHANDLE Handle, SQLSMALLINT HandleType, const w
 		const SQLRETURN Ret = ::SQLGetDiagRecW(
 			HandleType, Handle, RecIndex,
 			SqlState, &NativeError,
-			Message, static_cast<SQLSMALLINT>(sizeof(Message) / sizeof(SQLWCHAR)), &MessageLength);
+			Message, (sizeof(Message) / sizeof(SQLWCHAR)), &MessageLength);
 
 		if (Ret == SQL_NO_DATA || SQL_SUCCEEDED(Ret) == false)
 			break;

@@ -12,7 +12,7 @@ public:
 	NetAddress() = default;
 
 	/** SOCKADDR_IN으로부터 생성한다. (AcceptEx 결과 파싱 등) */
-	explicit NetAddress(const SOCKADDR_IN& InSockAddr) : SockAddr(InSockAddr) {}
+	NetAddress(const SOCKADDR_IN& InSockAddr) : SockAddr(InSockAddr) {}
 
 	/** IP 문자열 + 포트로부터 생성한다. */
 	NetAddress(const std::string& Ip, uint16 Port);

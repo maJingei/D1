@@ -10,7 +10,7 @@ public:
 	/** 기본 용량 64KB (스펙 합의값). */
 	static constexpr int32 DefaultCapacity = 65536;
 
-	explicit RecvBuffer(int32 InCapacity = DefaultCapacity);
+	RecvBuffer(int32 InCapacity = DefaultCapacity);
 
 	/** RegisterRecv 직전 호출: 쓰기 공간 확보. */
 	void Clean();

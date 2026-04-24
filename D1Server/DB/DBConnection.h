@@ -37,6 +37,17 @@ public:
 	/** SQL 한 문장을 Execute 하고 성공 여부를 반환한다. (v1: INSERT 전용) */
 	bool Execute(const wchar_t* Sql);
 
+	/**
+	 * M6 트랜잭션 3-API. SQLSetConnectAttr(SQL_ATTR_AUTOCOMMIT) + SQLEndTran 으로 구현한다.
+	 * 사용 계약: BeginTransaction → (여러 SQL) → Commit 또는 Rollback.
+	 * Commit/Rollback 은 성공·실패와 무관하게 autocommit 을 다시 ON 으로 복원한다 —
+	 * 연결이 Pool 로 되돌아가기 전에 원상 상태를 보장한다.
+	 * DBJobQueue 가 한 Job 동안 connection 을 독점하므로 중첩 트랜잭션은 고려하지 않는다.
+	 */
+	bool BeginTransaction();
+	bool CommitTransaction();
+	bool RollbackTransaction();
+
 	/** 연결을 끊고 HDBC 를 해제한다. 소멸자에서도 호출된다. */
 	void Disconnect();
 

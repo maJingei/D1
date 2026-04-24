@@ -185,22 +185,25 @@ void Level::DoLeave(uint64 PlayerID)
 
 void Level::DoLogoutAndSave(uint64 PlayerID, std::string AccountId)
 {
-	// 현재 Level.Players 에 있는 entry 가 로그아웃 시점의 진실. 스냅샷을 떠서 DB 워커로 넘긴다.
+	// 현재 Level.Players 에 있는 entry 가 로그아웃 시점의 진실. 힙 스냅샷을 떠서 DB 워커로 넘긴다.
 	auto It = Players.find(PlayerID);
 	if (It != Players.end())
 	{
-		PlayerEntry Snapshot = It->second;
-		Snapshot.LevelID = LevelID; // 방어적 동기화.
+		// M6 AsNoTracking 업데이트 경로 — Players 맵이 소유한 원본과 독립된 힙 복사본을 shared_ptr 로 감싼다.
+		// Players.erase 이후에도 SnapshotPtr 은 자기 복사본을 들고 있어 수명이 안전.
+		auto SnapshotPtr = std::make_shared<PlayerEntry>(It->second);
+		SnapshotPtr->LevelID = LevelID; // 방어적 동기화.
 
-		DBJobQueue::GetInstance().Schedule([Snapshot](DBConnection& Conn) mutable
+		DBJobQueue::GetInstance().Schedule([SnapshotPtr](DBConnection& Conn)
 		{
 			DBContext Ctx(Conn);
 			auto& PlayersDB = Ctx.Set<PlayerEntry>();
-			const bool bOk = PlayersDB.Update(Snapshot);
+			PlayersDB.Update(SnapshotPtr);
+			const bool bOk = Ctx.SaveChanges();
 			std::cout << "[DB] Logout save " << (bOk ? "OK" : "FAIL")
-				<< " PlayerID=" << Snapshot.PlayerID
-				<< " tile=(" << Snapshot.TileX << "," << Snapshot.TileY << ")"
-				<< " HP=" << Snapshot.HP << "/" << Snapshot.MaxHP << "\n";
+				<< " PlayerID=" << SnapshotPtr->PlayerID
+				<< " tile=(" << SnapshotPtr->TileX << "," << SnapshotPtr->TileY << ")"
+				<< " HP=" << SnapshotPtr->HP << "/" << SnapshotPtr->MaxHP << "\n";
 		});
 	}
 

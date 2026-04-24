@@ -38,7 +38,7 @@ private:
 class ReadLockGuard
 {
 public:
-	explicit ReadLockGuard(ReadWriteLock& InLock) : Lock(InLock)
+	ReadLockGuard(ReadWriteLock& InLock) : Lock(InLock)
 	{
 		Lock.ReadLock();
 	}
@@ -59,7 +59,7 @@ private:
 class WriteLockGuard
 {
 public:
-	explicit WriteLockGuard(ReadWriteLock& InLock) : Lock(InLock)
+	WriteLockGuard(ReadWriteLock& InLock) : Lock(InLock)
 	{
 		Lock.WriteLock();
 	}

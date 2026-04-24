@@ -11,7 +11,7 @@ class Job
 {
 public:
 	/** 콜백 버전 생성자: 이미 준비된 callable 을 그대로 저장한다. */
-	explicit Job(std::function<void()> Callback)
+	Job(std::function<void()> Callback)
 		: Callback(std::move(Callback))
 	{
 	}

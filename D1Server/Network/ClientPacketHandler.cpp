@@ -82,21 +82,19 @@ bool Handle_C_LOGIN(PacketSessionRef& session, Protocol::C_LOGIN& pkt)
 		return true;
 	}
 
-	
-	// TODO : 트랜젝션 관리 구현 필요
 	DBJobQueue::GetInstance().Schedule([GameSession, Id, Pw](DBConnection& Conn)
 	{
 		DBContext Ctx(Conn);
 		auto& Accounts = Ctx.Set<Account>();
 		auto& Players = Ctx.Set<PlayerEntry>();
 
-		// M5: DBSet<T>::Find 는 T* (nullptr = 행 없음) 반환. IdentityMap 이 소유, 여기서는 non-owning ptr.
+		// DBSet<T>::Find 는 T* (nullptr = 행 없음) 반환. Identified 맵이 소유, 여기서는 non-owning ptr.
 		Account* AccPtr = Accounts.Find(Id);
 
 		PlayerEntry Entry;
 		if (AccPtr != nullptr)
 		{
-			// 기존 계정 — 비밀번호 검증 후 PlayerEntry 로드.
+			// 기존 계정 — 비밀번호 검증 후 PlayerEntry 로드. 쓰기 없음 → SaveChanges 불필요.
 			if (std::strcmp(AccPtr->Password, Pw.c_str()) != 0)
 			{
 				SendLoginResult(GameSession, Protocol::LR_INVALID_CREDENTIALS);
@@ -108,47 +106,48 @@ bool Handle_C_LOGIN(PacketSessionRef& session, Protocol::C_LOGIN& pkt)
 				SendLoginResult(GameSession, Protocol::LR_DB_ERROR);
 				return;
 			}
-			// IdentityMap entry 는 람다 스코프에서 소멸 — 이후 세션 경로에 전달하려면 값 복사 1회.
+			// Identified entry 는 람다 스코프에서 소멸 — 이후 세션 경로에 전달하려면 값 복사 1회.
 			Entry = *EntryPtr;
 		}
 		else
 		{
-			// 자동 가입 — PlayerID 발급, Account + PlayerEntry 쌍으로 insert.
+			// 자동 가입 — Account + PlayerEntry 를 한 트랜잭션으로 묶어 원자적으로 INSERT.
 			const uint64 NewPlayerID = World::GetInstance().AllocNewPlayerID();
 
 			// TODO : strncpy_s 이거는 나중에 고쳐보자
-			Account NewAcc;
-			strncpy_s(NewAcc.Id, Id.c_str(), Id.size());
-			strncpy_s(NewAcc.Password, Pw.c_str(), Pw.size());
-			NewAcc.PlayerID = static_cast<int64>(NewPlayerID);
-
-			if (Accounts.Insert(NewAcc) == false)
-			{
-				SendLoginResult(GameSession, Protocol::LR_DB_ERROR);
-				return;
-			}
+			auto NewAcc = std::make_shared<Account>();
+			strncpy_s(NewAcc->Id, Id.c_str(), Id.size());
+			strncpy_s(NewAcc->Password, Pw.c_str(), Pw.size());
+			NewAcc->PlayerID = static_cast<int64>(NewPlayerID);
+			Accounts.Add(NewAcc);
 
 			// 신규 PlayerEntry 기본 스폰 구성 — WalkableTiles 에서 결정론적 위치 선택.
-			Entry.PlayerID = NewPlayerID;
-			Entry.CharacterType = static_cast<Protocol::CharacterType>(NewPlayerID % 3);
-			Entry.LevelID = static_cast<int32>(NewPlayerID % static_cast<uint64>(LEVEL_COUNT));
-			const auto& Walkables = World::GetInstance().GetLevel(Entry.LevelID)->WalkableTiles;
+			auto NewEntry = std::make_shared<PlayerEntry>();
+			NewEntry->PlayerID = NewPlayerID;
+			NewEntry->CharacterType = static_cast<Protocol::CharacterType>(NewPlayerID % 3);
+			NewEntry->LevelID = static_cast<int32>(NewPlayerID % static_cast<uint64>(LEVEL_COUNT));
+			const auto& Walkables = World::GetInstance().GetLevel(NewEntry->LevelID)->WalkableTiles;
 			if (Walkables.empty() == false)
 			{
 				const auto& Tile = Walkables[NewPlayerID % Walkables.size()];
-				Entry.TileX = Tile.first;
-				Entry.TileY = Tile.second;
+				NewEntry->TileX = Tile.first;
+				NewEntry->TileY = Tile.second;
 			}
-			Entry.HP = 20;
-			Entry.MaxHP = 20;
-			Entry.AttackDamage = 5;
-			Entry.TileMoveSpeed = 6.0f;
+			NewEntry->HP = 20;
+			NewEntry->MaxHP = 20;
+			NewEntry->AttackDamage = 5;
+			NewEntry->TileMoveSpeed = 6.0f;
+			Players.Add(NewEntry);
 
-			if (Players.Insert(Entry) == false)
+			// 원자적 커밋 — 둘 중 하나라도 실패하면 ROLLBACK, DB 불일치 없음.
+			if (Ctx.SaveChanges() == false)
 			{
 				SendLoginResult(GameSession, Protocol::LR_DB_ERROR);
 				return;
 			}
+
+			// 세션 경로로 전달할 값 복사(Schedule 람다 종료 시 NewEntry 는 함께 소멸).
+			Entry = *NewEntry;
 		}
 
 		// 중복 로그인 체크 — World 맵에 이미 동일 AccountId 활성 세션이 있으면 거절.

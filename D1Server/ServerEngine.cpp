@@ -97,55 +97,93 @@ bool ServerEngine::Init()
 			<< " Server=" << ServerName << std::endl;
 	});
 
-	// M5 IdentityMap 검증 smoke — 실제 로그인 PlayerID 와 충돌 않게 전용 9999 사용.
-	// DONE 기준: 동일 DBContext 안에서 같은 PK 로 Find 2회 시, 2번째 호출이 DB 왕복 없이
-	// [DBIdMap] HIT 로그를 찍고 1번째 호출과 동일한 ptr 을 반환한다.
+	// M6 ChangeTracker + SaveChanges 검증 smoke — 실제 로그인 PlayerID 와 충돌 않게 전용 9999 사용.
+	// "1 Job = 1 DBContext = 1 SaveChanges = 1 Transaction" 제약 때문에 각 단계를 독립 Job 으로 쪼갠다.
+	// DONE 기준(육안 관측):
+	//   Job1  이전 실행 찌꺼기 정리 (있으면 Remove+SaveChanges → DELETE, 없으면 skip)
+	//   Job2  Add + 같은 Job 내 Find(PK) Added HIT + SaveChanges → INSERT
+	//   Job3  Find MISS(DB 로드) → Find HIT(같은 ptr) → Remove + SaveChanges → DELETE
+	//   Job4  Find 가 nullptr 로 정상 종료
 	static constexpr uint64 kSmokePlayerID = 9999;
+
+	// Job1: 이전 실행 찌꺼기 정리.
+	DBJobQueue::GetInstance().Schedule([](DBConnection& Conn)
+	{
+		DBContext Ctx(Conn);
+		auto& Players = Ctx.Set<PlayerEntry>();
+		PlayerEntry* Old = Players.Find(kSmokePlayerID);
+		if (Old == nullptr)
+		{
+			std::cout << "[M6/Smoke] Job1 cleanup: no leftover (PK=" << kSmokePlayerID << ")" << std::endl;
+			return;
+		}
+		Players.Remove(Old);
+		const bool bOk = Ctx.SaveChanges();
+		std::cout << "[M6/Smoke] Job1 cleanup DELETE " << (bOk ? "OK" : "FAIL") << std::endl;
+	});
+
+	// Job2: Add + 같은 Job 내 Find(PK) Added HIT + SaveChanges.
 	DBJobQueue::GetInstance().Schedule([](DBConnection& Conn)
 	{
 		DBContext Ctx(Conn);
 		auto& Players = Ctx.Set<PlayerEntry>();
 
-		// DBContext::Set 캐시 자체 검증 — 같은 타입 2회 요청 시 동일 인스턴스. IdentityMap 일관성의 전제.
+		// DBContext::Set 캐시 자체 검증 — 같은 타입 2회 요청 시 동일 인스턴스. Tracked 일관성의 전제.
 		auto& PlayersAgain = Ctx.Set<PlayerEntry>();
-		const bool bSetCacheOk = (&Players == &PlayersAgain);
-		std::cout << "[DBIdMap/Smoke] Set<T> cache " << (bSetCacheOk ? "OK" : "FAIL (different instances)") << std::endl;
-
-		// 전용 9999 행이 이전 실행에서 남아있을 수 있으므로 선삭제 — idempotent 보장.
-		Players.Delete(kSmokePlayerID);
+		std::cout << "[M6/Smoke] Job2 Set<T> cache " << ((&Players == &PlayersAgain) ? "OK" : "FAIL") << std::endl;
 
 		// Seed 행 — NOT NULL 컬럼 기본값만 채운다. NULL 가능 셋은 _Ind=SQL_NULL_DATA 디폴트 유지.
-		PlayerEntry Seed;
-		Seed.PlayerID = kSmokePlayerID;
-		Seed.CharacterType = Protocol::CT_DEFAULT;
-		Seed.LevelID = 0;
-		Seed.TileX = 5;
-		Seed.TileY = 7;
-		Seed.HP = 20;
-		Seed.MaxHP = 20;
-		Seed.AttackDamage = 5;
-		Seed.TileMoveSpeed = 6.0f;
-		const bool bInserted = Players.Insert(Seed);
-		std::cout << "[DBIdMap/Smoke] Insert " << (bInserted ? "OK" : "FAIL") << " (PlayerID=" << kSmokePlayerID << ")" << std::endl;
-		if (bInserted == false) return;
+		auto Seed = std::make_shared<PlayerEntry>();
+		Seed->PlayerID = kSmokePlayerID;
+		Seed->CharacterType = Protocol::CT_DEFAULT;
+		Seed->LevelID = 0;
+		Seed->TileX = 5;
+		Seed->TileY = 7;
+		Seed->HP = 20;
+		Seed->MaxHP = 20;
+		Seed->AttackDamage = 5;
+		Seed->TileMoveSpeed = 6.0f;
+		PlayerEntry* Added = Players.Add(Seed);
+		std::cout << "[M6/Smoke] Job2 Add ptr=" << static_cast<void*>(Added) << std::endl;
 
-		// Find #1 — IdentityMap 비어있음 → [DBIdMap] MISS + DB SELECT 1회.
+		// Added 상태의 엔티티는 같은 Job 내 Find(PK) 에서 HIT 로 잡혀야 한다 — 일관성 검증.
+		PlayerEntry* Found = Players.Find(kSmokePlayerID);
+		std::cout << "[M6/Smoke] Job2 Find-after-Add identity=" << ((Added == Found) ? "OK (same ptr)" : "FAIL") << std::endl;
+
+		// 원자적 커밋 — Added → INSERT.
+		const bool bOk = Ctx.SaveChanges();
+		std::cout << "[M6/Smoke] Job2 SaveChanges (INSERT) " << (bOk ? "OK" : "FAIL") << std::endl;
+	});
+
+	// Job3: Find MISS(DB 로드) → Find HIT(같은 ptr) → Remove + SaveChanges (DELETE).
+	DBJobQueue::GetInstance().Schedule([](DBConnection& Conn)
+	{
+		DBContext Ctx(Conn);
+		auto& Players = Ctx.Set<PlayerEntry>();
+
+		// Find #1 — 새 DBContext 라 Identified 비어있음 → [DBIdMap] MISS + DB SELECT 1회.
 		PlayerEntry* First = Players.Find(kSmokePlayerID);
-		std::cout << "[DBIdMap/Smoke] Find#1 result ptr=" << static_cast<void*>(First) << " TileX=" << (First ? First->TileX : -1) << std::endl;
+		std::cout << "[M6/Smoke] Job3 Find#1 ptr=" << static_cast<void*>(First)
+			<< " TileX=" << (First ? First->TileX : -1) << std::endl;
 		if (First == nullptr) return;
 
-		// Find #2 — 동일 DBContext 내 중복 호출. DB 왕복 0회 + [DBIdMap] HIT 관측 + First 와 동일 ptr 반환.
+		// Find #2 — 동일 DBContext 내 재조회. DB 왕복 0회 + [DBIdMap] HIT + First 와 동일 ptr.
 		PlayerEntry* Second = Players.Find(kSmokePlayerID);
-		const bool bIdentityOk = (First == Second);
-		std::cout << "[DBIdMap/Smoke] Find#2 result ptr=" << static_cast<void*>(Second) << " identity=" << (bIdentityOk ? "OK (same ptr)" : "FAIL (different ptr)") << std::endl;
+		std::cout << "[M6/Smoke] Job3 Find#2 identity=" << ((First == Second) ? "OK (same ptr)" : "FAIL") << std::endl;
 
-		// Delete — DB 행 + 맵 entry 동시 제거. 이후 Find 는 다시 MISS 여야 한다.
-		const bool bDeleted = Players.Delete(kSmokePlayerID);
-		std::cout << "[DBIdMap/Smoke] Delete " << (bDeleted ? "OK" : "FAIL") << " (PlayerID=" << kSmokePlayerID << ")" << std::endl;
+		// 삭제 → Deleted 상태 마킹 → SaveChanges 에서 DELETE.
+		Players.Remove(First);
+		const bool bOk = Ctx.SaveChanges();
+		std::cout << "[M6/Smoke] Job3 SaveChanges (DELETE) " << (bOk ? "OK" : "FAIL") << std::endl;
+	});
 
-		// Find #3 — 삭제 후 재조회. 맵에서 erase 됐으므로 MISS, DB 에도 행이 없으므로 nullptr.
-		PlayerEntry* Third = Players.Find(kSmokePlayerID);
-		std::cout << "[DBIdMap/Smoke] Find#3 result ptr=" << static_cast<void*>(Third) << " expected=nullptr" << std::endl;
+	// Job4: 삭제 후 재조회. DB 에도 행이 없으므로 nullptr 이어야 성공.
+	DBJobQueue::GetInstance().Schedule([](DBConnection& Conn)
+	{
+		DBContext Ctx(Conn);
+		auto& Players = Ctx.Set<PlayerEntry>();
+		PlayerEntry* Gone = Players.Find(kSmokePlayerID);
+		std::cout << "[M6/Smoke] Job4 Find post-DELETE ptr=" << static_cast<void*>(Gone) << " expected=nullptr" << std::endl;
 	});
 
 	// M4 smoke — 매크로 기반 메타데이터 / Build SQL 결과(? 플레이스홀더)를 main 스레드에서 한 번 덤프한다.
