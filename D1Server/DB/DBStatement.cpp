@@ -184,6 +184,26 @@ bool DBStatement::GetColumnFloat(SQLUSMALLINT ColumnIndex, float& OutValue)
 	return true;
 }
 
+bool DBStatement::GetColumnDouble(SQLUSMALLINT ColumnIndex, double& OutValue)
+{
+	if (Hstmt == SQL_NULL_HSTMT)
+		return false;
+
+	// SQL_C_DOUBLE 은 8바이트 double-precision — SQL Server FLOAT(53) 과 1:1. SUM(FLOAT) 집계 결과 수신용.
+	SQLLEN Indicator = 0;
+	SQLDOUBLE Value = 0.0;
+	const SQLRETURN Ret = ::SQLGetData(Hstmt, ColumnIndex, SQL_C_DOUBLE, &Value, sizeof(Value), &Indicator);
+	if (SQL_SUCCEEDED(Ret) == false)
+	{
+		DBConnection::HandleError(Hstmt, SQL_HANDLE_STMT, L"SQLGetData(DOUBLE)");
+		OutValue = 0.0;
+		return false;
+	}
+
+	OutValue = (Indicator == SQL_NULL_DATA) ? 0.0 : static_cast<double>(Value);
+	return true;
+}
+
 // ============================================================
 // BindParam — 입력 바인딩 (write 경로)
 // ============================================================

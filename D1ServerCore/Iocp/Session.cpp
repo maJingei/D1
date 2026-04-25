@@ -149,8 +149,10 @@ void Session::RegisterConnect(const NetAddress& Address)
 
 void Session::ProcessConnect()
 {
-	if (bDisconnected.load(std::memory_order_relaxed)) return;
-	std::cout << "[Session] Connected" << std::endl;
+	if (bDisconnected.load(std::memory_order_relaxed)) 
+	{
+	    return;
+	}
 	OnConnected();
 }
 
@@ -270,7 +272,6 @@ void Session::OnSend(int32 NumOfBytes)
 
 void Session::OnDisconnected()
 {
-	std::cout << "[Session] Disconnected" << std::endl;
 }
 
 /*-----------------------------------------------------------------*/

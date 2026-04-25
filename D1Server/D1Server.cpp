@@ -67,7 +67,6 @@ int main(int argc, char* argv[])
 			while (Server->GetIocpCore()->Dispatch())
 			{
 			}
-			std::cout << "[Worker] Dispatch loop exited\n";
 		});
 	}
 
@@ -86,7 +85,6 @@ int main(int argc, char* argv[])
 					break;
 				Queue->FlushJob();
 			}
-			std::cout << "[FlushWorker] exited\n";
 		});
 	}
 
@@ -105,7 +103,6 @@ int main(int argc, char* argv[])
 				DBJobQueue::GetInstance().Drain();
 				std::this_thread::sleep_for(std::chrono::milliseconds(10));
 			}
-			std::cout << "[DBWorker] exited\n";
 		});
 	}
 
@@ -119,7 +116,6 @@ int main(int argc, char* argv[])
 	
 	// (1) ServerService 정지
 	Server->Stop();
-	std::cout << "[IOCP quit signal]\n";
 
 	// (2) IOCP 워커 종료 신호 — 워커 1개당 PQCS 1건이 dequeue 되어야 Dispatch 루프가 종료된다.
 	//     IOCP_WORKER_COUNT 만큼 게시하지 않으면 일부 워커가 GetQueuedCompletionStatus(INFINITE)에서 영원히 대기한다.
@@ -135,13 +131,11 @@ int main(int argc, char* argv[])
 
 	// (4) 모든 워커 Join
 	Manager.JoinAll();
-	std::cout << "[Worker joined]\n";
 
 	// (5) Server shared_ptr 해제 — ~Service 의 Sessions(Set<SessionRef>) sentinel 노드를
 	//     deallocate 하려면 PoolManager 가 살아 있어야 한다. 따라서 Engine.Destroy 의
 	//     PoolManager::Shutdown() 보다 *반드시 먼저* 호출해야 한다.
 	Server.reset();
-	std::cout << "[Server released]\n";
 
 	// (6) 메인 스레드 TLS SendBufferChunk 참조 해제.
 	SendBufferManager::ShutdownThread();

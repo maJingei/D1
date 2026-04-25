@@ -2,6 +2,7 @@
 
 #include "Core/CoreMinimal.h"
 #include "DB/DBMeta.h"
+#include "DB/DBQuery.h"
 #include "Protocol.pb.h"
 
 #include <sql.h>
@@ -11,31 +12,16 @@
 
 class GameServerSession;
 
-/**
- * 방에 입장한 플레이어 한 명의 상태 스냅샷.
- * M3 에서 Level.h 에서 이사해왔다 — 같은 파일 하단의 DB_REGISTER_TABLE 블록과 함께
- * "엔티티 = 구조체 + 스키마 선언" 번들을 형성한다.
- *
- * 영속 9 필드 (DB 매핑 대상) — 순서는 dbo.PlayerEntry 컬럼 선언 순서와 동일:
- *   PlayerID, CharacterType, LevelID, TileX, TileY, HP, MaxHP, AttackDamage, TileMoveSpeed
- * 런타임 6 필드 (DB 매핑 금지) — 하단 섹션 주석 참조.
- */
+/** 방 입장 플레이어 1명의 상태 — 영속 필드(DB 매핑) + 런타임 필드(매핑 제외) 번들. */
 struct PlayerEntry
 {
 	/** 플레이어 고유 식별자. DB PK. */
 	uint64 PlayerID = 0;
 
-	/**
-	 * 코스메틱 캐릭터 타입 — 스탯/행동 동일, 스프라이트만 다름. DoEnter 에서 PlayerID 해시로 자동 배정한다.
-	 * DB 연동 이후엔 C_LOGIN 에 실려 온 저장값으로 대체될 예정.
-	 */
+	/** 코스메틱 캐릭터 타입(스프라이트만 다름). DoEnter 에서 PlayerID 해시로 자동 배정. */
 	Protocol::CharacterType CharacterType = Protocol::CT_DEFAULT;
 
-	/**
-	 * 현재 소속 Level 인덱스.
-	 * TODO(M5): DoEnter/DoPortalTransition 에서 Session.LevelID 로 동기화 필요.
-	 *           현재는 기본값 0 이 그대로 들어감 — M2 smoke 수준에서는 무해.
-	 */
+	/** 현재 소속 Level 인덱스. TODO(M5): DoEnter/DoPortalTransition 에서 Session.LevelID 로 동기화 필요. */
 	int32 LevelID = 0;
 
 	int32 TileX = 0;
@@ -50,9 +36,7 @@ struct PlayerEntry
 	/** 1회 공격 시 대상에게 가하는 데미지. 공격자 책임 원칙 — 서버가 C_ATTACK 처리 시 이 값을 Monster.ApplyDamage 에 전달한다. */
 	int32 AttackDamage = 5;
 
-	/**
-	 * 타일/초 단위 이동 속도. 1 칸 이동 쿨다운(ms) = 1000(ms/sec) / TileMoveSpeed(tiles/sec). 초당 4칸 이동
-	 */
+	/** 타일/초 이동 속도. 쿨다운(ms) = 1000 / TileMoveSpeed. */
 	float TileMoveSpeed = 6.0f;
 
 	// [M5 신규 영속 필드 — 풀세트 5종 검증용] ----------------------------------
@@ -86,10 +70,7 @@ struct PlayerEntry
 	/** HP=0 이후 true. 추가 입력(이동/공격) 패킷을 모두 무시한다. */
 	bool bIsDead = false;
 
-	/**
-	 * Portal 전이 직후 true. DoTryMove 가 성공 이동 처리 시 Portal 트리거 검사를 건너뛰고 플래그를 해제한다.
-	 * TargetSpawnTile 자체가 또 다른 Portal 타일인 예외 상황에서 무한 루프를 방지하기 위한 안전장치.
-	 */
+	/** Portal 전이 직후 true. 다음 이동 성공 시 Portal 트리거 skip + 해제 — 포탈 체인 무한 루프 방지. */
 	bool bJustTeleported = false;
 
 	/** Client Prediction 모델에서 마지막으로 수락한 C_MOVE. */
@@ -101,11 +82,7 @@ struct PlayerEntry
 	std::weak_ptr<GameServerSession> Session;
 };
 
-// ============================================================
-// dbo.PlayerEntry 테이블 메타데이터 등록 (M3)
-// 선언 순서 = Schema/PlayerEntry.sql 의 컬럼 순서와 1:1.
-// 런타임 필드(bIsDead 등) 는 여기에 등록되지 않아 자연스럽게 제외된다.
-// ============================================================
+// dbo.PlayerEntry 메타데이터 등록 — 선언 순서 = Schema/PlayerEntry.sql 컬럼 순서와 1:1. 런타임 필드는 미등록으로 자연 제외.
 
 DB_REGISTER_TABLE_BEGIN(PlayerEntry, "dbo.PlayerEntry", uint64)
 	DB_COLUMN_PK(PlayerID, BIGINT)
@@ -123,3 +100,23 @@ DB_REGISTER_TABLE_BEGIN(PlayerEntry, "dbo.PlayerEntry", uint64)
 	DB_COLUMN(Reputation, SMALLINT)
 	DB_COLUMN_NULL(AvatarHash, VARBINARY(32))
 DB_REGISTER_TABLE_END()
+
+// LINQ ColumnProxy 묶음. 인덱스는 DB_REGISTER_TABLE_BEGIN 블록의 DB_COLUMN 선언 순서와 1:1.
+
+struct PlayerEntryCol
+{
+	static constexpr ColumnProxy<PlayerEntry, 0> PlayerID{};
+	static constexpr ColumnProxy<PlayerEntry, 1> CharacterType{};
+	static constexpr ColumnProxy<PlayerEntry, 2> LevelID{};
+	static constexpr ColumnProxy<PlayerEntry, 3> TileX{};
+	static constexpr ColumnProxy<PlayerEntry, 4> TileY{};
+	static constexpr ColumnProxy<PlayerEntry, 5> HP{};
+	static constexpr ColumnProxy<PlayerEntry, 6> MaxHP{};
+	static constexpr ColumnProxy<PlayerEntry, 7> AttackDamage{};
+	static constexpr ColumnProxy<PlayerEntry, 8> TileMoveSpeed{};
+	static constexpr ColumnProxy<PlayerEntry, 9> NickName{};
+	static constexpr ColumnProxy<PlayerEntry, 10> IsAdmin{};
+	static constexpr ColumnProxy<PlayerEntry, 11> LastLoginAt{};
+	static constexpr ColumnProxy<PlayerEntry, 12> Reputation{};
+	static constexpr ColumnProxy<PlayerEntry, 13> AvatarHash{};
+};

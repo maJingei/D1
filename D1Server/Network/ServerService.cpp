@@ -14,15 +14,12 @@ bool ServerService::Start()
 	{
 		return false;
 	}
-	
-	std::cout << "[ServerService] Started (" << Address.GetIp() << ":" << Address.GetPort() << ")" << std::endl;
+
 	return true;
 }
 
 void ServerService::Stop()
 {
-	std::cout << "[Stop begin]" << std::endl;
-
 	// (1) Listener::Shutdown()으로 listen 소켓을 닫아 pending AcceptEx들을 abort 완료로 drain한다.
 	//     Shutdown이 ListenSocket을 INVALID_SOCKET으로 즉시 전환하므로, abort 완료가
 	//     ProcessAccept로 올라와도 고스트 세션이 생성되지 않는다.
@@ -59,6 +56,4 @@ void ServerService::Stop()
 		}
 		::Sleep(10);
 	}
-
-	std::cout << "[Stop drain OK]" << std::endl;
 }

@@ -187,6 +187,8 @@
     <ClInclude Include="DB\DBJobQueue.h" />
     <ClInclude Include="DB\DBMeta.h" />
     <ClInclude Include="DB\DBOrm.h" />
+    <ClInclude Include="DB\DBQuery.h" />
+    <ClInclude Include="DB\DBQueryBuildSql.h" />
     <ClInclude Include="DB\DBSet.h" />
     <ClInclude Include="DB\DBStatement.h" />
     <ClInclude Include="GameObject\AActor.h" />

@@ -2,6 +2,8 @@
 
 #include "Core/CoreMinimal.h"
 #include "DB/DBOrm.h"
+#include "DB/DBQuery.h"
+#include "DB/DBQueryBuildSql.h"
 
 #include <cstring>
 #include <iostream>
@@ -12,11 +14,7 @@
 
 class DBConnection;
 
-/**
- * M6 EntityState — EF Core 와 1:1 대응.
- * M6 시점의 D1Server 는 모든 엔티티가 애플리케이션 발급 PK 를 가지므로 Added 상태도 Identified 맵에 그대로 들어간다.
- * IDENTITY/서버 생성 PK 지원(M8) 시점에 PendingAdds 2-버킷 구조로 분리 예정 — techspec 3.5.1 참조.
- */
+/** EF Core 와 1:1 대응. Added 도 Identified 맵에 수용 (앱 발급 PK 전제). */
 enum class EEntityState : uint8
 {
 	Unchanged = 0,  // Find 로 로드된 직후 상태. DetectChanges 가 Modified 로 승격할 수 있다.
@@ -25,12 +23,7 @@ enum class EEntityState : uint8
 	Deleted,        // Remove 결과. SaveChanges 시 DELETE 대상.
 };
 
-/**
- * DBSet<T> 가 트래킹하는 엔트리 1건의 단위 구조체.
- * 엔티티 shared_ptr + 상태 + 영속 영역 바이트 스냅샷.
- * 클래스 내부에 중첩하지 않고 외부에 두어 동일 엔티티 타입에 대한 외부 유틸리티(로그/디버깅/테스트) 가
- * DBSetEntry<T> 를 직접 참조할 수 있게 한다.
- */
+/** DBSet<T> 트래킹 엔트리 1건 — 엔티티 shared_ptr + 상태 + ColumnMeta 영역 바이트 스냅샷. */
 template<typename T>
 struct DBSetEntry
 {
@@ -40,50 +33,17 @@ struct DBSetEntry
 	std::vector<uint8> Snapshot;
 };
 
-/**
- * 타입 소거 베이스.
- * DBContext 의 Sets 맵이 unique_ptr<IDBSet> 으로 보관한다. SaveChanges 진입점이
- * 등록된 모든 DBSet 의 FlushChanges 를 한 트랜잭션 안에서 순차 호출한다.
- */
+/** 타입 소거 베이스 — DBContext::Sets 에 unique_ptr<IDBSet> 로 보관되어 SaveChanges 가 일괄 FlushChanges 호출. */
 class IDBSet
 {
 public:
 	virtual ~IDBSet() = default;
 
-	/**
-	 * SaveChanges 가 트랜잭션 BEGIN 직후 각 DBSet 에 대해 부른다.
-	 * 구현부는 Added INSERT → Modified UPDATE → Deleted DELETE 순으로 발행하고 실패 시 false.
-	 * 호출자(DBContext::SaveChanges)가 false 를 받으면 Rollback 후 DBContext 를 dead 로 전환한다.
-	 */
+	/** BEGIN 직후 호출 — Added INSERT → Modified UPDATE → Deleted DELETE 순 발행. 실패 시 상위가 Rollback. */
 	virtual bool FlushChanges(DBConnection& Conn) = 0;
 };
 
-/**
- * EF Core 의 DbSet<T> 등가. M6 부터 IdentityMap + ChangeTracker 역할을 함께 수행한다.
- *
- * [단일 버킷 구조]
- *  - Identified: unordered_map<PkType, DBSetEntry<T>>. M6 의 D1Server 는 모든 엔티티가 Add 시점에 PK 를 보유(앱 발급).
- *    Added 상태도 여기에 들어가므로 같은 Job 안에서 Add → Find(PK) 가 자연스럽게 hit 된다.
- *  - M8 IDENTITY 도입 시 PendingAdds 벡터를 분리해 PK 미발급 엔티티를 별도 수용 예정.
- *
- * [수명/소유권]
- *  - entity 는 shared_ptr<T> 소유. Find/Add 경로 모두 non-owning T* 반환 — DBContext 스코프(= Schedule 람다) 안에서 유효.
- *  - SaveChanges 호출 후 DBContext 는 dead 마킹됨 — 같은 DBContext 재사용 금지.
- *
- * [Snapshot 모델]
- *  - Find 는 DBOrm::Find 성공 시 ColumnMeta.Offset/Size 영역만 sizeof(T) 버퍼에 복사한다.
- *    런타임 필드(weak_ptr 등 non-trivially copyable)는 ColumnMeta 에 등록되지 않으므로 자연 제외 → memcpy 안전.
- *  - Add 는 신규 행이라 Snapshot 불필요(INSERT 가 전체 필드).
- *  - Update(shared_ptr) 는 Snapshot 을 비워둔다(= AsNoTracking 경로). SaveChanges 는 diff 건너뛰고 전체 UPDATE.
- *  - DetectChanges: Unchanged entry 의 현재 바이트와 Snapshot 을 ColumnMeta 영역별로 memcmp → diff 가 있으면 Modified 승격.
- *
- * [UPDATE 범위]
- *  - M6: 변경 감지 후 DBOrm::Update 재사용 — 전체 비-PK 컬럼 UPDATE. 간결/안전 우선.
- *  - M9+: diff 컬럼만 SET 하는 동적 UPDATE 로 확장 가능(prepared cache 키가 컬럼 비트마스크가 됨).
- *
- * [Thread safety]
- *  - DBJobQueue 가 단일 DB 워커 스레드를 보장 → 내부 자료구조 동기화 불필요.
- */
+/** EF Core DbSet<T> 등가 — IdentityMap + ChangeTracker 역할. 단일 DB 워커 전제로 내부 동기화 없음. */
 template<typename T>
 class DBSet : public IDBSet
 {
@@ -98,13 +58,7 @@ public:
 	DBSet(DBSet&&) = delete;
 	DBSet& operator=(DBSet&&) = delete;
 
-	/**
-	 * M6 트래킹 Find.
-	 *   hit (Unchanged/Added/Modified): [DBIdMap] HIT, 엔티티 ptr 반환. Added hit 은 같은 Job 내 Add 후 재조회 일관성을 보장.
-	 *   hit (Deleted): nullptr — 논리적으로 삭제됐으므로 노출 금지.
-	 *   miss: DBOrm::Find 로 1행 SELECT → Unchanged 로 등록 + Snapshot 캡처 → ptr 반환.
-	 *   row 없음: nullptr + 맵에 저장 안 함(음성 캐싱 없음).
-	 */
+	/** 트래킹 Find — Identified HIT 면 ptr 반환(Deleted 는 nullptr), MISS 면 DB 로드 후 Unchanged+Snapshot 등록. */
 	T* Find(const PkType& PkValue)
 	{
 		// 1. identity Map에서 캐싱 확인
@@ -112,15 +66,11 @@ public:
 		{
 			if (It->second.State == EEntityState::Deleted)
 			{
-				std::cout << "[DBIdMap] HIT-DEL (Table=" << GetTableMetadata<T>().TableName << ", PK=" << PkValue << ") -> nullptr" << std::endl;
 				return nullptr;
 			}
-			std::cout << "[DBIdMap] HIT  (Table=" << GetTableMetadata<T>().TableName << ", PK=" << PkValue << ")" << std::endl;
 			return It->second.Entity.get();
 		}
 
-		std::cout << "[DBIdMap] MISS (Table=" << GetTableMetadata<T>().TableName << ", PK=" << PkValue << ")" << std::endl;
-		
 		// 2. 캐시 없으면 생성
 		auto Entity = std::make_shared<T>();
 		
@@ -140,11 +90,7 @@ public:
 		return Raw;
 	}
 
-	/**
-	 * 새 엔티티를 Added 로 등록. SaveChanges 시 INSERT 발행.
-	 * 앱 발급 PK 전제 — Entity 의 PK 필드가 이미 채워져 있어야 한다(M6 범위).
-	 * 같은 PK 로 이미 tracked 엔트리가 있으면 nullptr(중복 Add 방지).
-	 */
+	/** 새 엔티티를 Added 로 등록(앱 발급 PK 전제). 중복 PK 면 nullptr. SaveChanges 에서 INSERT. */
 	T* Add(std::shared_ptr<T> Entity)
 	{
 		if (Entity == nullptr) return nullptr;
@@ -159,11 +105,7 @@ public:
 		return Raw;
 	}
 
-	/**
-	 * 외부에서 만든 엔티티를 Modified 로 바로 등록(AsNoTracking 업데이트 경로).
-	 * 이미 Identified 에 같은 PK 가 있으면 false(Find/Update 경로를 섞지 않기 위함).
-	 * SaveChanges 시 DBOrm::Update 가 전체 비-PK 컬럼 UPDATE.
-	 */
+	/** 외부 생성 엔티티를 Modified 로 직결 등록(AsNoTracking 경로). 기존 PK 있으면 false. 전체 비-PK UPDATE. */
 	bool Update(std::shared_ptr<T> Entity)
 	{
 		if (Entity == nullptr) return false;
@@ -177,10 +119,7 @@ public:
 		return true;
 	}
 
-	/**
-	 * tracked 엔티티를 Deleted 로 전환. Find 또는 Add 반환 ptr 을 그대로 넘기는 게 정석.
-	 * Added 상태를 Remove 하면 "Add 취소" 효과 — 맵에서 erase, SaveChanges 는 INSERT 도 DELETE 도 발행하지 않는다.
-	 */
+	/** tracked 엔티티를 Deleted 로 전환. Added 상태 Remove 는 맵에서 erase (Add 취소). */
 	bool Remove(T* Entity)
 	{
 		if (Entity == nullptr) return false;
@@ -197,14 +136,117 @@ public:
 		return true;
 	}
 
-	/**
-	 * M6 SaveChanges 내부 디스패치. 실행 순서:
-	 *   1) DetectChanges — Unchanged 엔트리를 Snapshot 대비 비교 후 Modified 승격.
-	 *   2) Added INSERT 일괄.
-	 *   3) Modified UPDATE 일괄.
-	 *   4) Deleted DELETE 일괄.
-	 * 어느 단계든 DBOrm 이 false 면 즉시 중단 → 상위(DBContext::SaveChanges)에서 Rollback.
-	 */
+	/** Where 체인 시작 — ExprNode 술어를 담은 IQueryable<T> 를 반환. */
+	IQueryable<T> Where(ExprNode Predicate)
+	{
+		IQueryable<T> Query(*this);
+		Query.Where(std::move(Predicate));
+		return Query;
+	}
+
+	/** OrderBy 체인 시작 — 첫 정렬 키를 오름차순으로 등록한 IQueryable<T> 반환. */
+	template<size_t Idx>
+	IQueryable<T> OrderBy(ColumnProxy<T, Idx> Column)
+	{
+		IQueryable<T> Query(*this);
+		Query.OrderBy(Column);
+		return Query;
+	}
+
+	/** OrderByDescending 체인 시작 — 첫 정렬 키를 내림차순으로 등록한 IQueryable<T> 반환. */
+	template<size_t Idx>
+	IQueryable<T> OrderByDescending(ColumnProxy<T, Idx> Column)
+	{
+		IQueryable<T> Query(*this);
+		Query.OrderByDescending(Column);
+		return Query;
+	}
+
+	/** AsNoTracking 체인 시작 — 추적 해제 플래그를 켠 IQueryable<T> 반환. */
+	IQueryable<T> AsNoTracking()
+	{
+		IQueryable<T> Query(*this);
+		Query.AsNoTracking();
+		return Query;
+	}
+
+	/** 전체 행 카운트. SELECT COUNT(*) FROM T; */
+	int64 Count()
+	{
+		IQueryable<T> Query(*this);
+		return Query.Count();
+	}
+
+	/** 필터 카운트. SELECT COUNT(*) FROM T WHERE <pred>; */
+	int64 Count(ExprNode Predicate)
+	{
+		IQueryable<T> Query(*this);
+		Query.Where(std::move(Predicate));
+		return Query.Count();
+	}
+
+	/** 전체 행 합계. SELECT SUM(Col) FROM T; 반환 타입은 컬럼 타입 따라 int64 or double. */
+	template<size_t Idx>
+	auto Sum(ColumnProxy<T, Idx> Column)
+	{
+		IQueryable<T> Query(*this);
+		return Query.Sum(Column);
+	}
+
+	/** 필터 합계. SELECT SUM(Col) FROM T WHERE <pred>; */
+	template<size_t Idx>
+	auto Sum(ColumnProxy<T, Idx> Column, ExprNode Predicate)
+	{
+		IQueryable<T> Query(*this);
+		Query.Where(std::move(Predicate));
+		return Query.Sum(Column);
+	}
+
+	// ─── M7 내부 적재 헬퍼 (IQueryable<T> 종결자가 호출) ─────────
+
+	/** Tracking 경로 — 동일 PK 존재 시 identity preservation, 신규면 Unchanged+Snapshot 등록. Deleted 히트 시 nullptr. */
+	T* IngestRowWithTracking(std::shared_ptr<T> Row)
+	{
+		if (Row == nullptr)
+		{
+			return nullptr;
+		}
+		
+		const PkType Pk = ExtractPk(*Row);
+		if (auto It = Identified.find(Pk); It != Identified.end())
+		{
+			if (It->second.State == EEntityState::Deleted)
+			{
+				return nullptr;
+			}
+			return It->second.Entity.get();
+		}
+
+		Entry NewEntry;
+		NewEntry.Entity = Row;
+		NewEntry.State = EEntityState::Unchanged;
+		CaptureSnapshot(*Row, NewEntry.Snapshot);
+		T* Raw = NewEntry.Entity.get();
+		Identified.emplace(Pk, std::move(NewEntry));
+		return Raw;
+	}
+
+	/** NoTracking 경로 — NoTrackingResults 벡터에 shared_ptr 소유, Identified 는 건드리지 않음. */
+	T* IngestRowNoTracking(std::shared_ptr<T> Row)
+	{
+		if (Row == nullptr)
+		{
+			return nullptr;
+		}
+		T* Raw = Row.get();
+		NoTrackingResults.push_back(std::move(Row));
+		return Raw;
+	}
+
+	/** DBQueryBuildSql 루틴이 SQL 실행 시 DBConnection 접근에 사용. */
+	DBConnection& GetConnection() const { return Conn; }
+
+	/** SaveChanges 디스패치 — DetectChanges → Added INSERT → Modified UPDATE → Deleted DELETE. 실패 시 false. */
 	virtual bool FlushChanges(DBConnection& InConn) override
 	{
 		for (auto& Pair : Identified)
@@ -305,10 +347,269 @@ private:
 		{
 			return std::wstring(reinterpret_cast<const wchar_t*>(Src));
 		}
-		static_assert(sizeof(T) == 0, "ExtractPk: unsupported PkType — add branch (uint64/string/wstring)");
-		return PkType{}; // unreachable — static_assert 가 먼저 컴파일 에러를 낸다. MSVC 정적 분석기의 return-path 경고 회피용.
+		else
+		{
+			static_assert(sizeof(T) == 0, "ExtractPk: unsupported PkType — add branch (uint64/string/wstring)");
+			return PkType{};
+		}
 	}
 
 	DBConnection& Conn;
 	std::unordered_map<PkType, Entry> Identified;
+	// M7 AsNoTracking 경로 결과 보관소. T* 가 DBContext 수명 동안 유효하도록 shared_ptr 로 소유.
+	std::vector<std::shared_ptr<T>> NoTrackingResults;
 };
+
+
+// IQueryable<T> 종결자 정의 — BuildSelectSql → GetOrPrepare → Bind → Execute → Fetch 루프 → Ingest.
+
+template<typename T>
+inline std::vector<T*> IQueryable<T>::ToList()
+{
+	// 1. SQL + 바인딩 조립. TopLimit = 0 → SELECT 전수.
+	std::wstring Sql;
+	std::vector<QueryParameterBinding> Bindings;
+	BuildSelectSql<T>(GetRootPredicate(), GetOrderTerms(), 0, Sql, Bindings);
+
+	DBConnection& Conn = SourceSet.GetConnection();
+	DBStatement* Stmt = Conn.GetOrPrepare(Sql);
+	if (Stmt == nullptr) 
+		return {};
+	if (Stmt->Reset() == false) 
+		return {};
+	if (BindLiteralsToStatement(*Stmt, Bindings) == false) 
+		return {};
+
+	// 2. 결과 컬럼을 scratch 엔티티에 BindCol. Fetch 루프에서 scratch 가 매 row 로 덮어써짐.
+	auto Scratch = std::make_shared<T>();
+	const auto& Meta = GetTableMetadata<T>();
+	void* EntityBase = static_cast<void*>(Scratch.get());
+	for (size_t i = 0; i < Meta.NumColumns; ++i)
+	{
+		if (DBOrmDetail::BindColFromMeta(*Stmt, static_cast<SQLUSMALLINT>(i + 1), Meta.Columns[i], EntityBase) == false)
+			return {};
+	}
+
+	if (Stmt->Execute() == false) 
+		return {};
+
+	// 3. Fetch 루프 — 각 row 를 scratch 복사해 IdentityMap/NoTrackingCache 에 적재.
+	std::vector<T*> Results;
+	while (Stmt->Fetch())
+	{
+		auto Row = std::make_shared<T>(*Scratch);
+		
+		T* Tracked = IsNoTracking() ? SourceSet.IngestRowNoTracking(std::move(Row)) : SourceSet.IngestRowWithTracking(std::move(Row));
+		
+		if (Tracked != nullptr)
+		{
+			Results.push_back(Tracked);
+		}
+	}
+	return Results;
+}
+
+template<typename T>
+inline T* IQueryable<T>::FirstOrDefault()
+{
+	// TopLimit = 1 — SQL 서버가 1 행만 내려주므로 Fetch 1 회면 충분.
+	std::wstring Sql;
+	std::vector<QueryParameterBinding> Bindings;
+	BuildSelectSql<T>(GetRootPredicate(), GetOrderTerms(), 1, Sql, Bindings);
+
+	DBConnection& Conn = SourceSet.GetConnection();
+	DBStatement* Stmt = Conn.GetOrPrepare(Sql);
+	if (Stmt == nullptr) return nullptr;
+	if (Stmt->Reset() == false) return nullptr;
+	if (BindLiteralsToStatement(*Stmt, Bindings) == false) return nullptr;
+
+	auto Scratch = std::make_shared<T>();
+	const auto& Meta = GetTableMetadata<T>();
+	void* EntityBase = static_cast<void*>(Scratch.get());
+	for (size_t i = 0; i < Meta.NumColumns; ++i)
+	{
+		if (DBOrmDetail::BindColFromMeta(*Stmt, static_cast<SQLUSMALLINT>(i + 1), Meta.Columns[i], EntityBase) == false)
+			return nullptr;
+	}
+
+	if (Stmt->Execute() == false)
+	{
+		return nullptr;
+	}
+	
+	// 0 행 — 매칭 없음.
+	if (Stmt->Fetch() == false)
+	{
+		return nullptr;
+	}
+
+	auto Row = std::make_shared<T>(*Scratch);
+	return IsNoTracking() ? SourceSet.IngestRowNoTracking(std::move(Row)) : SourceSet.IngestRowWithTracking(std::move(Row));
+}
+
+template<typename T>
+inline T* IQueryable<T>::SingleOrDefault()
+{
+	// TopLimit = 2 — 2 행 여부를 알아야 하므로 1 이상이면 안 됨. 2 로 끊어 조기 탐지.
+	std::wstring Sql;
+	std::vector<QueryParameterBinding> Bindings;
+	BuildSelectSql<T>(GetRootPredicate(), GetOrderTerms(), 2, Sql, Bindings);
+
+	DBConnection& Conn = SourceSet.GetConnection();
+	DBStatement* Stmt = Conn.GetOrPrepare(Sql);
+	if (Stmt == nullptr)
+	{
+		return nullptr;
+	}
+	if (Stmt->Reset() == false)
+	{
+		return nullptr;
+	}
+	if (BindLiteralsToStatement(*Stmt, Bindings) == false)
+	{
+		return nullptr;
+	}
+
+	auto Scratch = std::make_shared<T>();
+	const auto& Meta = GetTableMetadata<T>();
+	void* EntityBase = static_cast<void*>(Scratch.get());
+	for (size_t i = 0; i < Meta.NumColumns; ++i)
+	{
+		if (DBOrmDetail::BindColFromMeta(*Stmt, static_cast<SQLUSMALLINT>(i + 1), Meta.Columns[i], EntityBase) == false)
+			return nullptr;
+	}
+
+	if (Stmt->Execute() == false)
+	{
+		return nullptr;
+	}
+	
+	// 0 행 — 매칭 없음.
+	if (Stmt->Fetch() == false)
+	{
+		return nullptr;
+	}
+
+	auto FirstRow = std::make_shared<T>(*Scratch);
+
+	// 2 번째 Fetch 가 성공하면 violation — EF Core 는 예외, D1Server 는 로그 + nullptr. 이 부분이 FirstOrDefault와 다른점
+	if (Stmt->Fetch())
+	{
+		std::cout << "[DBQuery] SingleOrDefault violation — query returned more than 1 row (Table="	<< GetTableMetadata<T>().TableName << ")" << std::endl;
+		return nullptr;
+	}
+
+	return IsNoTracking() ? SourceSet.IngestRowNoTracking(std::move(FirstRow)) : SourceSet.IngestRowWithTracking(std::move(FirstRow));
+}
+
+
+// M7.1 집계 종결자 — 단일 스칼라 Fetch, Scratch/BindCol 불필요, Identity Map 무관.
+
+template<typename T>
+inline int64 IQueryable<T>::Count()
+{
+	std::wstring Sql;
+	std::vector<QueryParameterBinding> Bindings;
+	BuildCountSql<T>(GetRootPredicate(), Sql, Bindings);
+
+	DBConnection& Conn = SourceSet.GetConnection();
+	DBStatement* Stmt = Conn.GetOrPrepare(Sql);
+	if (Stmt == nullptr)
+	{
+		return 0;
+	}
+	if (Stmt->Reset() == false)
+	{
+		return 0;
+	}
+	if (BindLiteralsToStatement(*Stmt, Bindings) == false)
+	{
+		return 0;
+	}
+	if (Stmt->Execute() == false)
+	{
+		return 0;
+	}
+	if (Stmt->Fetch() == false)
+	{
+		return 0;
+	}
+
+	int64 Result = 0;
+	Stmt->GetColumnInt64(1, Result);
+	return Result;
+}
+
+template<typename T>
+template<size_t Idx>
+inline auto IQueryable<T>::Sum(ColumnProxy<T, Idx>)
+{
+	// 컴파일타임 타입 가드 — 허용 안 되는 컬럼(문자열/날짜/바이너리)은 즉시 에러.
+	constexpr ESqlCType CT = TableMetadata<T>::Columns[Idx].CType;
+	static_assert(
+		CT == ESqlCType::SBigInt || CT == ESqlCType::SLong ||
+		CT == ESqlCType::SShort || CT == ESqlCType::UTinyInt ||
+		CT == ESqlCType::Bit ||
+		CT == ESqlCType::Float || CT == ESqlCType::Double,
+		"IQueryable::Sum requires a numeric column (SBigInt/SLong/SShort/UTinyInt/Bit/Float/Double)");
+
+	std::wstring Sql;
+	std::vector<QueryParameterBinding> Bindings;
+	BuildSumSql<T>(Idx, GetRootPredicate(), Sql, Bindings);
+
+	DBConnection& Conn = SourceSet.GetConnection();
+	DBStatement* Stmt = Conn.GetOrPrepare(Sql);
+
+	if constexpr (CT == ESqlCType::Float || CT == ESqlCType::Double)
+	{
+		double Result = 0.0;
+		if (Stmt == nullptr)
+		{
+			return Result;
+		}
+		if (Stmt->Reset() == false)
+		{
+			return Result;
+		}
+		if (BindLiteralsToStatement(*Stmt, Bindings) == false)
+		{
+			return Result;
+		}
+		if (Stmt->Execute() == false)
+		{
+			return Result;
+		}
+		if (Stmt->Fetch() == false)
+		{
+			return Result;   // 0 행 → SUM NULL → GetColumnDouble 이 0.0 정규화.
+		}
+		Stmt->GetColumnDouble(1, Result);
+		return Result;
+	}
+	else
+	{
+		int64 Result = 0;
+		if (Stmt == nullptr)
+		{
+			return Result;
+		}
+		if (Stmt->Reset() == false)
+		{
+			return Result;
+		}
+		if (BindLiteralsToStatement(*Stmt, Bindings) == false)
+		{
+			return Result;
+		}
+		if (Stmt->Execute() == false)
+		{
+			return Result;
+		}
+		if (Stmt->Fetch() == false)
+		{
+			return Result;   // 0 행 → SUM NULL → GetColumnInt64 가 0 정규화.
+		}
+		Stmt->GetColumnInt64(1, Result);
+		return Result;
+	}
+}

@@ -5,29 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 
-/**
- * DB 메타데이터 레이어 (M5 풀세트).
- * 매크로 기반 DSL 로 구조체당 TableMetadata<T> 를 컴파일 타임에 특수화한다.
- * DBOrm 의 SQLBindParameter / SQLBindCol 디스패치는 ColumnMeta::CType + Offset/Size/Length/Precision 을
- * 소비해 자동 바인딩한다.
- *
- * 사용 예 (M5):
- *   DB_REGISTER_TABLE_BEGIN(PlayerEntry, "dbo.PlayerEntry", uint64)
- *       DB_COLUMN_PK(PlayerID, BIGINT)
- *       DB_COLUMN(CharacterType, INT)
- *       DB_COLUMN_NULL(NickName, NVARCHAR(32))
- *       DB_COLUMN(IsAdmin, BIT)
- *       DB_COLUMN_NULL(LastLoginAt, DATETIME2(3))
- *       DB_COLUMN_NULL(AvatarHash, VARBINARY(32))
- *   DB_REGISTER_TABLE_END()
- *
- * 세 번째 인자 PkTypeSpec (M5 IdentityMap 신규): TableMetadata<T>::PkType 로 노출된다.
- * BIGINT → uint64, VARCHAR(N) → std::string, NVARCHAR(N) → std::wstring 규약.
- * DBSet<T> 가 IdentityMap 키 타입으로 직접 소비한다.
- *
- * NULL 가능 컬럼은 Row 안에 SQLLEN <FieldName>_Ind 슬롯을 함께 선언해야 한다 — 매크로가
- * offsetof(Row, FieldName##_Ind) 로 자동 추정. 컨벤션 위반 시 컴파일 에러로 즉시 잡힘.
- */
+/** DB 메타데이터 DSL — DB_REGISTER_TABLE_* 매크로로 TableMetadata<T> 컴파일타임 특수화. DBOrm 이 CType+Offset 으로 자동 바인딩. */
 
 /** ODBC SQL_C_* 상수와 1:1 매핑되는 enum. M5 풀세트 12종. */
 enum class ESqlCType : uint8
@@ -46,15 +24,7 @@ enum class ESqlCType : uint8
 	Binary,        // SQL_C_BINARY   / VARBINARY(N) — uint8[N]
 };
 
-/**
- * 컬럼 한 개의 메타데이터. type-erased 저장 — 멤버 포인터 대신 offset/size/CType 으로
- * 풀어 둬서 constexpr ColumnMeta Columns[] 균일 배열이 가능해진다.
- *
- * Size vs Length:
- *   Size   = sizeof(decltype(Row::Field)) — C 버퍼의 byte 크기 (NVARCHAR(32) 면 (32+1)*2 = 66)
- *   Length = SQL 정의의 N (NVARCHAR(32) 의 32). 고정형은 0.
- * IndicatorOffset = SIZE_MAX 면 NOT NULL — bNullable == false 와 항상 짝.
- */
+/** 컬럼 한 개의 type-erased 메타 — offset/size/CType 으로 풀어둬 constexpr 균일 배열 가능. Size=버퍼 byte, Length=SQL N. */
 struct ColumnMeta
 {
 	const char* Name;
@@ -74,10 +44,7 @@ struct ColumnMeta
 template<typename T>
 struct TableMetadata;
 
-/**
- * TableMetadata<T> 접근자. 모든 멤버가 static constexpr 라 실질 참조 없이도 동작하지만,
- * 호출부의 `auto& Meta = GetTableMetadata<T>();` 문법을 지원하기 위해 static 인스턴스를 노출한다.
- */
+/** TableMetadata<T> 접근자. `auto& Meta = GetTableMetadata<T>();` 문법 지원을 위해 static 인스턴스 노출. */
 template<typename T>
 constexpr const TableMetadata<T>& GetTableMetadata()
 {
@@ -85,19 +52,7 @@ constexpr const TableMetadata<T>& GetTableMetadata()
 	return Meta;
 }
 
-// ============================================================
-// 내부 preprocessor helper — SQL 타입 토큰 → 문자열 / ESqlCType / Length / Precision 매핑
-//
-// 동작 원리:
-//   고정형: DB_INTERNAL_SQLNAME(BIGINT) → DB_INTERNAL_CONCAT(DB_INTERNAL_SQLNAME_, BIGINT)
-//           → DB_INTERNAL_SQLNAME_BIGINT (object-like) → "BIGINT"
-//   가변형: DB_INTERNAL_SQLNAME(NVARCHAR(32))
-//           → DB_INTERNAL_CONCAT(DB_INTERNAL_SQLNAME_, NVARCHAR(32))
-//           → DB_INTERNAL_SQLNAME_##NVARCHAR(32)  (토큰 결합)
-//           → 재스캔 시 function-like 호출로 인식 → "NVARCHAR(32)"
-//
-// MSVC /Zc:preprocessor 또는 표준 conformant preprocessor 가정 (VS2022 v143 기본 충족).
-// ============================================================
+// 내부 preprocessor helper — SQL 타입 토큰(BIGINT/NVARCHAR(N) 등) → 문자열/ESqlCType/Length/Precision 매핑.
 
 #define DB_INTERNAL_CONCAT(A, B) DB_INTERNAL_CONCAT_IMPL(A, B)
 #define DB_INTERNAL_CONCAT_IMPL(A, B) A##B
@@ -170,12 +125,7 @@ constexpr const TableMetadata<T>& GetTableMetadata()
 // 사용자용 DSL 매크로
 // ============================================================
 
-/**
- * TableMetadata<TypeName> 특수화 헤더를 연다. TableStr 은 SQL 테이블 풀네임 문자열 리터럴.
- * PkTypeSpec 은 M5 IdentityMap 키 타입 — BIGINT=uint64, VARCHAR=std::string, NVARCHAR=std::wstring.
- * 본 매크로 사이 DB_COLUMN / DB_COLUMN_PK / DB_COLUMN_NULL 을 나열하고
- * DB_REGISTER_TABLE_END() 로 닫는다.
- */
+/** TableMetadata<TypeName> 특수화 시작. PkTypeSpec = BIGINT→uint64 / VARCHAR→std::string / NVARCHAR→std::wstring. */
 #define DB_REGISTER_TABLE_BEGIN(TypeName, TableStr, PkTypeSpec)      \
 	template<>                                                       \
 	struct TableMetadata<TypeName>                                   \
@@ -185,10 +135,7 @@ constexpr const TableMetadata<T>& GetTableMetadata()
 		static constexpr const char* TableName = TableStr;           \
 		static constexpr ColumnMeta Columns[] = {
 
-/**
- * NOT NULL 일반 컬럼 1개. SqlTypeTok 은 BIGINT/INT/.../NVARCHAR(32) 같은 토큰.
- * offsetof 는 non-standard-layout 타입(weak_ptr 포함)에서도 MSVC 는 확장으로 지원한다.
- */
+/** NOT NULL 일반 컬럼. SqlTypeTok = BIGINT/INT/NVARCHAR(32) 등 토큰. */
 #define DB_COLUMN(FieldName, SqlTypeTok)                             \
 	ColumnMeta{                                                      \
 		#FieldName,                                                  \
@@ -220,14 +167,7 @@ constexpr const TableMetadata<T>& GetTableMetadata()
 		0                                                            \
 	},
 
-/**
- * NULL 가능 일반 컬럼 1개. 사용자는 Row 안에 SQLLEN <FieldName>_Ind; 를 함께 선언해야 한다.
- * 매크로가 offsetof(Row, FieldName##_Ind) 로 자동 추정 — 컨벤션 어기면 컴파일 에러.
- *
- * Insert 시 호출자가 <FieldName>_Ind = SQL_NULL_DATA 로 두면 NULL 저장,
- * 비-NULL 이면 SQL_NTS (string) 또는 실제 byte 길이 (binary) 를 채워야 한다.
- * Find 시 ODBC 가 <FieldName>_Ind 에 SQL_NULL_DATA 또는 실제 길이를 기록한다.
- */
+/** NULL 가능 컬럼. Row 에 SQLLEN <FieldName>_Ind; 슬롯 필요 — 매크로가 offsetof 자동 추정. */
 #define DB_COLUMN_NULL(FieldName, SqlTypeTok)                        \
 	ColumnMeta{                                                      \
 		#FieldName,                                                  \
@@ -243,10 +183,7 @@ constexpr const TableMetadata<T>& GetTableMetadata()
 		0                                                            \
 	},
 
-/**
- * DB_REGISTER_TABLE_BEGIN 을 닫는다. NumColumns / PkIndex 는 Columns[] 에서 파생.
- * PkIndex 탐색은 constexpr 루프로 수행 — bIsPK == true 인 첫 인덱스를 반환한다.
- */
+/** DB_REGISTER_TABLE_BEGIN 마감. NumColumns/PkIndex 는 Columns[] 에서 constexpr 파생. */
 #define DB_REGISTER_TABLE_END()                                      \
 		};                                                           \
 		static constexpr size_t NumColumns =                         \

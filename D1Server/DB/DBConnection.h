@@ -11,15 +11,7 @@
 
 class DBStatement;
 
-/**
- * ODBC 연결(SQL_HANDLE_DBC) 하나를 감싸는 RAII 래퍼.
- * DBConnectionPool 이 HENV 와 함께 생성·수명 관리한다. execute 내부에서는
- * DBStatement 를 일회성 RAII 스코프 객체로 만들어 SQLExecDirectW 를 호출한다.
- *
- * Statement Cache: SQL 텍스트별로 prepared DBStatement 를 캐시한다. DBJobQueue 가
- * 한 잡 동안 connection 을 독점하는 모델이므로 락 없이 동시성 안전 — 다른 워커가
- * 같은 connection 을 동시에 만지지 않는다. 캐시 항목의 수명은 DBConnection 과 동일.
- */
+/** SQL_HANDLE_DBC RAII 래퍼 — DBConnectionPool 이 수명 관리. Statement Cache 는 한 Job 독점 모델로 락 없음. */
 class DBConnection
 {
 public:
@@ -37,13 +29,7 @@ public:
 	/** SQL 한 문장을 Execute 하고 성공 여부를 반환한다. (v1: INSERT 전용) */
 	bool Execute(const wchar_t* Sql);
 
-	/**
-	 * M6 트랜잭션 3-API. SQLSetConnectAttr(SQL_ATTR_AUTOCOMMIT) + SQLEndTran 으로 구현한다.
-	 * 사용 계약: BeginTransaction → (여러 SQL) → Commit 또는 Rollback.
-	 * Commit/Rollback 은 성공·실패와 무관하게 autocommit 을 다시 ON 으로 복원한다 —
-	 * 연결이 Pool 로 되돌아가기 전에 원상 상태를 보장한다.
-	 * DBJobQueue 가 한 Job 동안 connection 을 독점하므로 중첩 트랜잭션은 고려하지 않는다.
-	 */
+	/** 트랜잭션 3-API — autocommit OFF/ON 전환. Commit/Rollback 모두 autocommit ON 복원(풀 반환 전 상태 보장). */
 	bool BeginTransaction();
 	bool CommitTransaction();
 	bool RollbackTransaction();
@@ -53,11 +39,7 @@ public:
 
 	SQLHDBC GetHandle() const { return Hdbc; }
 
-	/**
-	 * SQL 텍스트로 prepared DBStatement 를 조회·반환. 캐시에 없으면 lazy 하게 alloc + Prepare 후 캐시.
-	 * 반환된 statement 는 본 connection 소유 — 호출자는 Reset → Bind → Execute 만 수행하고 해제하지 않는다.
-	 * Prepare 실패 시 nullptr.
-	 */
+	/** SQL 텍스트로 prepared DBStatement 조회 — 캐시 miss 면 lazy alloc+Prepare. 소유권 보유, 실패 시 nullptr. */
 	DBStatement* GetOrPrepare(const std::wstring& Sql);
 
 	/** 실패 시 SQLGetDiagRecW 루프로 SQLSTATE·네이티브 에러·메시지를 로그에 남긴다. */

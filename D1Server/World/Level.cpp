@@ -53,19 +53,14 @@ void Level::LoadCollisionMap(const std::string& CollisionCsvPath)
 			}
 		}
 	}
-	std::cout << "[Level " << LevelID << "] CollisionMap " << (bLoaded ? "loaded" : "failed")
-		<< " walkable=" << WalkableTiles.size()
-		<< ": " << CollisionCsvPath << "\n";
 }
 
 void Level::BeginPlay()
 {
-	std::cout << "[Level " << LevelID << "] BeginPlay\n";
 }
 
 void Level::Destroy()
 {
-	std::cout << "[Level " << LevelID << "] Destroy\n";
 }
 
 // ---------------------------------------------------------------------------

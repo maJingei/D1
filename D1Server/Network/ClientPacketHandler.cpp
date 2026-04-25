@@ -9,7 +9,6 @@
 #include "World/PlayerEntry.h"
 #include "World/World.h"
 
-#include <cstring>
 #include <iostream>
 #include <string>
 
@@ -89,8 +88,8 @@ bool Handle_C_LOGIN(PacketSessionRef& session, Protocol::C_LOGIN& pkt)
 		auto& Players = Ctx.Set<PlayerEntry>();
 
 		// DBSet<T>::Find 는 T* (nullptr = 행 없음) 반환. Identified 맵이 소유, 여기서는 non-owning ptr.
-		Account* AccPtr = Accounts.Find(Id);
-
+		// Account* AccPtr = Accounts.Find(Id);
+		Account* AccPtr = Accounts.Where(AccountCol::Id == Id.c_str()).SingleOrDefault();
 		PlayerEntry Entry;
 		if (AccPtr != nullptr)
 		{

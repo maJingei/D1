@@ -51,8 +51,6 @@ bool Listener::Start(const NetAddress& Address, std::weak_ptr<Service> InService
 	for (AcceptEvent& Slot : AcceptEvents)
 		PostAccept(Slot);
 
-	std::cout << "[Listener] Started on " << Address.GetIp() << ":" << Address.GetPort()
-		<< " (AcceptEx pool=" << kAcceptPoolSize << ")" << "\n";
 	return true;
 }
 
@@ -118,8 +116,6 @@ void Listener::ProcessAccept(AcceptEvent& Event)
 
 	// Step 3: 수신 대기 시작
 	AcceptedSession->RegisterRecv();
-
-	std::cout << "[Listener] New client accepted (sessions: " << LockedService->GetSessionCount() << ")" << "\n";
 
 	// Step 4: 같은 슬롯을 새로운 pre-Session 으로 재무장하여 풀 깊이 유지
 	PostAccept(Event);

@@ -23,8 +23,6 @@ void World::DestroyInstance()
 
 bool World::Init(const std::string& ResourceBaseDir)
 {
-	std::cout << "[World] Init\n";
-
 	bool bAllLoaded = true;
 	for (int32 i = 0; i < LEVEL_COUNT; i++)
 	{
@@ -38,7 +36,6 @@ bool World::Init(const std::string& ResourceBaseDir)
 
 void World::BeginPlay()
 {
-	std::cout << "[World] BeginPlay\n";
 	for (int32 i = 0; i < LEVEL_COUNT; i++)
 		Levels[i]->BeginPlay();
 }
@@ -53,7 +50,6 @@ void World::Destroy()
 {
 	for (int32 i = 0; i < LEVEL_COUNT; i++)
 		Levels[i]->Destroy();
-	std::cout << "[World] Destroy\n";
 }
 
 void World::SeedNextPlayerIDFromDB()
@@ -73,7 +69,6 @@ void World::SeedNextPlayerIDFromDB()
 		int64 MaxId = 0;
 		Stmt.GetColumnInt64(1, MaxId);
 		NextPlayerID.store(static_cast<uint64>(MaxId) + 1, std::memory_order_relaxed);
-		std::cout << "[World] NextPlayerID seeded to " << (MaxId + 1) << "\n";
 	});
 }
 

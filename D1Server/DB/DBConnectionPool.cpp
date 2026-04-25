@@ -58,7 +58,6 @@ bool DBConnectionPool::Init(const wchar_t* ConnectString, int32 PoolSize)
 		}
 		Connections.push_back(Conn);
 	}
-	std::cout << "[DBConnectionPool] Init OK (PoolSize=" << PoolSize << ")\n";
 	return true;
 }
 
