@@ -50,6 +50,12 @@ public:
 	/** 신규 가입 시 1씩 발급되는 PlayerID. atomic fetch_add 로 단조 증가. */
 	uint64 AllocNewPlayerID() { return NextPlayerID.fetch_add(1, std::memory_order_relaxed); }
 
+	/**
+	 * 봇 nameplate 표시용 서버 전역 카운터. 1 부터 단조 증가, 서버 재시작 시 1 로 reset.
+	 * Handle_C_LOGIN(is_bot=true) 가 PlayerEntry.NameplateText 에 std::to_string(...) 으로 부여.
+	 */
+	uint32 AllocNewBotId() { return NextBotId.fetch_add(1, std::memory_order_relaxed); }
+
 	/** AccountId 가 이미 활성 세션이면 false. 성공 시 맵에 등록. 중복 로그인 차단용. */
 	bool TryRegisterAccount(const std::string& AccountId, std::shared_ptr<GameServerSession> Session);
 
@@ -75,6 +81,9 @@ private:
 
 	/** 전역 PlayerID 발급 카운터. 0 은 '미입장' 예약값이므로 1부터 시작. SeedNextPlayerIDFromDB 로 재시작 시 덮어씀. */
 	std::atomic<uint64> NextPlayerID{1};
+
+	/** 서버 전역 봇 nameplate 카운터. 봇 은 메모리 전용이라 DB 시딩 없음, 항상 1 부터 시작. */
+	std::atomic<uint32> NextBotId{1};
 
 	/** 활성 AccountId → Session 맵. IOCP(OnDisconnected)↔DB 워커(Login) 공유이므로 mutex 보호. */
 	std::unordered_map<std::string, std::weak_ptr<GameServerSession>> ActiveAccounts;

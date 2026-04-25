@@ -9,6 +9,7 @@
 #include <sqlext.h>
 
 #include <memory>
+#include <string>
 
 class GameServerSession;
 
@@ -76,8 +77,18 @@ struct PlayerEntry
 	/** Client Prediction 모델에서 마지막으로 수락한 C_MOVE. */
 	uint64 LastAcceptedSeq = 0;
 
-	/** 서버가 직전 이동 수락 시 GetTickCount64() 로 측정해 기록한 시각(ms). 쿨다운 검증의 기준점이며 클라 패킷과 무관. */
-	uint64 LastMoveTimeMs = 0;
+	/**
+	 * 마지막으로 수락된 C_MOVE 처리 시점의 서버 시각(GetTickCount64).
+	 * 0 이면 아직 한 번도 수락된 이동이 없는 상태(첫 패킷). 다음 C_MOVE 의 cooldown 은
+	 * ServerDelta = NowMs - LastServerAcceptMs 로 검증 — 클라 시간에 의존하지 않으므로 위조 불가.
+	 */
+	uint64 LastServerAcceptMs = 0;
+
+	/**
+	 * 캐릭터 머리 위(nameplate) + 채팅 sender 표시 공용 텍스트. 사람=Account.Id, 봇=서버 전역 카운터 숫자.
+	 * DB_REGISTER_TABLE 미등록 → 영속 제외. Handle_C_LOGIN 에서 부여, S_ENTER_GAME/S_SPAWN payload 로 클라에 전달된다.
+	 */
+	std::string NameplateText;
 
 	std::weak_ptr<GameServerSession> Session;
 };

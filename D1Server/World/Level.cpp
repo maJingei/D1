@@ -127,6 +127,8 @@ void Level::DoEnterWithState(PlayerEntry InitialEntry, std::shared_ptr<GameServe
 	const int32 TileY = InitialEntry.TileY;
 	const Protocol::CharacterType CharType = InitialEntry.CharacterType;
 	const float MoveSpeed = InitialEntry.TileMoveSpeed;
+	// nameplate 는 emplace 후 InitialEntry 가 move 되므로 미리 값 복사 — S_ENTER_GAME(my)+S_SPAWN 양쪽에서 사용.
+	const std::string MyNameplateText = InitialEntry.NameplateText;
 
 	// 기존 플레이어 스냅샷 수집 (자신 추가 전).
 	std::vector<PlayerEntry> Others;
@@ -147,6 +149,7 @@ void Level::DoEnterWithState(PlayerEntry InitialEntry, std::shared_ptr<GameServe
 	EnterRes.set_room_id(static_cast<uint32>(LevelID));
 	EnterRes.set_move_speed(MoveSpeed);
 	EnterRes.set_character_type(CharType);
+	EnterRes.set_my_nameplate_text(MyNameplateText);
 	for (const auto& Entry : Others)
 	{
 		Protocol::PlayerInfo* Info = EnterRes.add_others();
@@ -154,6 +157,7 @@ void Level::DoEnterWithState(PlayerEntry InitialEntry, std::shared_ptr<GameServe
 		Info->set_tile_x(Entry.TileX);
 		Info->set_tile_y(Entry.TileY);
 		Info->set_character_type(Entry.CharacterType);
+		Info->set_nameplate_text(Entry.NameplateText);
 	}
 	for (const auto& [MID, Monster] : Monsters)
 	{
@@ -170,6 +174,7 @@ void Level::DoEnterWithState(PlayerEntry InitialEntry, std::shared_ptr<GameServe
 	SpawnPkt.set_tile_x(TileX);
 	SpawnPkt.set_tile_y(TileY);
 	SpawnPkt.set_character_type(CharType);
+	SpawnPkt.set_nameplate_text(MyNameplateText);
 	DoBroadcast(ClientPacketHandler::MakeSendBuffer(SpawnPkt), PlayerID);
 }
 
@@ -424,7 +429,7 @@ bool Level::ValidateMove(const PlayerEntry& Self, int32 NextTileX, int32 NextTil
 	return true;
 }
 
-void Level::DoTryMove(uint64 PlayerID, Protocol::Direction Dir, uint64 ClientSeq)
+void Level::DoTryMove(uint64 PlayerID, Protocol::Direction Dir, uint64 ClientSeq, uint64 /*ClientDeltaMs*/)
 {
 	auto It = Players.find(PlayerID);
 	if (It == Players.end())
@@ -455,23 +460,28 @@ void Level::DoTryMove(uint64 PlayerID, Protocol::Direction Dir, uint64 ClientSeq
 	const int32 NextTileX = Self.TileX + DeltaX;
 	const int32 NextTileY = Self.TileY + DeltaY;
 
-	// 1) 이속핵 차단 — TileMoveSpeed 기반 엄격 쿨다운 검증.
-	//    LastMoveTimeMs == 0 이면 스폰 후 첫 이동이므로 쿨다운 면제.
-	//    ElapsedMs(현재 시간 - 서버에서 마지막으로 측정한 이동 시각) < CooldownMs 이면 정상 쿨다운보다 빨리 온 것 → reject.
+	// 1) Cooldown 검증 — 서버 시각만 사용한다. 클라가 보고한 ClientDelta 는 무시(위조 가능).
+	//    ServerDelta = (현재 서버 ms) - (마지막으로 수락된 C_MOVE 처리 시점). LastServerAcceptMs == 0 은 첫 패킷이므로 면제.
+	//    NetworkJitter 로 인한 살짝 빠른 도착은 JitterMargin 만큼 너그럽게 허용.
 	const uint64 NowMs = ::GetTickCount64();
 	const float CooldownMs = 1000.0f / Self.TileMoveSpeed;
-	const float ElapsedMs = static_cast<float>(NowMs - Self.LastMoveTimeMs);
-	if (Self.LastMoveTimeMs != 0 && ElapsedMs < CooldownMs)
+	static constexpr int64 JitterMarginMs = 100;
+
+	if (Self.LastServerAcceptMs != 0)
 	{
-		Protocol::S_MOVE_REJECT RejectPkt;
-		RejectPkt.set_player_id(PlayerID);
-		RejectPkt.set_tile_x(Self.TileX);
-		RejectPkt.set_tile_y(Self.TileY);
-		RejectPkt.set_client_seq(ClientSeq);
-		RejectPkt.set_last_accepted_seq(Self.LastAcceptedSeq);
-		if (auto Locked = Self.Session.lock())
-			Locked->Send(ClientPacketHandler::MakeSendBuffer(RejectPkt));
-		return;
+		const uint64 ServerDelta = NowMs - Self.LastServerAcceptMs;
+		if (static_cast<float>(ServerDelta) + static_cast<float>(JitterMarginMs) < CooldownMs)
+		{
+			Protocol::S_MOVE_REJECT RejectPkt;
+			RejectPkt.set_player_id(PlayerID);
+			RejectPkt.set_tile_x(Self.TileX);
+			RejectPkt.set_tile_y(Self.TileY);
+			RejectPkt.set_client_seq(ClientSeq);
+			RejectPkt.set_last_accepted_seq(Self.LastAcceptedSeq);
+			if (auto Locked = Self.Session.lock())
+				Locked->Send(ClientPacketHandler::MakeSendBuffer(RejectPkt));
+			return;
+		}
 	}
 
 	// 2. 공간검증
@@ -488,12 +498,12 @@ void Level::DoTryMove(uint64 PlayerID, Protocol::Direction Dir, uint64 ClientSeq
 		return;
 	}
 
-	// 검증 통과 — 위치 + Facing + 수락 seq + 서버 측정 시각 갱신 후 브로드캐스트.
+	// 검증 통과 — 위치 + Facing + 수락 seq + 서버측 수락 시각 갱신 후 브로드캐스트.
 	Self.TileX = NextTileX;
 	Self.TileY = NextTileY;
 	Self.LastDir = Dir;
 	Self.LastAcceptedSeq = ClientSeq;
-	Self.LastMoveTimeMs = NowMs;
+	Self.LastServerAcceptMs = NowMs;
 
 	Protocol::S_MOVE MovePkt;
 	MovePkt.set_player_id(PlayerID);
@@ -537,6 +547,17 @@ void Level::DoPortalTransition(uint64 PlayerID, std::shared_ptr<APortalActor> Po
 	std::cout << "[Level " << LevelID << "] PortalTransition: id=" << PlayerID
 		<< " target=(" << TargetLevelID << "," << TargetTileX << "," << TargetTileY << ")\n";
 
+	// Portal 전후 PlayerEntry 영속 필드(NameplateText/HP/MaxHP/AttackDamage/TileMoveSpeed/CharacterType 등)를 보존하기 위해
+	// erase 전에 현재 entry 를 스냅샷. spawn 좌표와 bJustTeleported 만 덮어쓴다.
+	PlayerEntry Snapshot = It->second;
+	Snapshot.TileX = TargetTileX;
+	Snapshot.TileY = TargetTileY;
+	Snapshot.bJustTeleported = true;
+	Snapshot.LevelID = TargetLevelID;
+	Snapshot.LastAcceptedSeq = 0;
+	// 새 Level 첫 C_MOVE 는 cooldown 면제 — LastServerAcceptMs=0 이 첫 패킷 표지 역할.
+	Snapshot.LastServerAcceptMs = 0;
+
 	// 현재 Level 에서 퇴장 — Players 제거 + 몬스터 락온 해제 + S_PLAYER_LEFT 브로드캐스트 일괄 처리.
 	DoRemovePlayer(PlayerID);
 
@@ -554,10 +575,11 @@ void Level::DoPortalTransition(uint64 PlayerID, std::shared_ptr<APortalActor> Po
 	// 세션의 LevelID 를 선갱신 — 이후 C_MOVE/C_ATTACK 이 들어오면 바로 대상 Level 로 라우팅되도록.
 	Session->SetLevelID(TargetLevelID);
 
-	// 대상 Level 의 JobQueue 에 DoEnter 큐잉 — bFromPortal=true 로 bJustTeleported 플래그를 세팅하도록 지시.
+	// 대상 Level 의 JobQueue 에 DoEnterWithState 큐잉 — Snapshot 으로 영속 상태 보존.
+	// DoEnter(디폴트 entry 생성 경로)를 거치지 않으므로 NameplateText/HP/MaxHP 등이 reset 되지 않는다.
 	auto TargetLevel = World::GetInstance().GetLevel(TargetLevelID);
 	if (TargetLevel != nullptr)
-		TargetLevel->DoAsync(&Level::DoEnter, PlayerID, Session, TargetTileX, TargetTileY, true);
+		TargetLevel->DoAsync(&Level::DoEnterWithState, std::move(Snapshot), Session);
 }
 
 void Level::DoBroadcast(SendBufferRef Buffer, uint64 ExceptID)
@@ -573,6 +595,15 @@ void Level::DoBroadcast(SendBufferRef Buffer, uint64 ExceptID)
 
 	for (const auto& Session : Targets)
 		Session->Send(Buffer);
+}
+
+void Level::DoBroadcastChat(uint64 SenderID, std::string Text)
+{
+	// 보낸 본인도 포함해 broadcast — 클라가 자신의 입력이 실제로 서버를 거쳐 돌아온 것을 채팅창에서 직접 확인.
+	Protocol::S_CHAT Pkt;
+	Pkt.set_sender_id(SenderID);
+	Pkt.set_text(std::move(Text));
+	DoBroadcast(ClientPacketHandler::MakeSendBuffer(Pkt), 0);
 }
 
 

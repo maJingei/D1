@@ -13,6 +13,7 @@ class ClientService;
 class Session;
 class UWorld;
 class ULoginWidget;
+class UChatPanel;
 
 /**
  * 클라이언트 상위 Scene 상태. Login 에서는 World 를 Tick/Render 하지 않고 ULoginWidget 만 렌더한다.
@@ -66,6 +67,9 @@ public:
 	/** 로그인 위젯. Handle_S_LOGIN 이 ShowError/SetVisible 을 호출한다. */
 	ULoginWidget* GetLoginWidget() const { return LoginWidget.get(); }
 
+	/** 좌하단 Room 채팅 패널. Handle_S_CHAT 이 AddLine 을 호출하고 Tick 이 입력/엔터 토글을 관리한다. */
+	UChatPanel* GetChatPanel() const { return ChatPanel.get(); }
+
 private:
 
 	void BeginPlay();
@@ -101,6 +105,9 @@ private:
 
 	/** Login 상태 전용 전체화면 로그인 위젯. BeginPlay 에서 생성. */
 	std::unique_ptr<ULoginWidget> LoginWidget;
+
+	/** InGame 상태 좌하단 Room 채팅 패널. BeginPlay 에서 생성, EndPlay 에서 reset. */
+	std::unique_ptr<UChatPanel> ChatPanel;
 
 	/** 전역 접근용 정적 포인터. Initialize에서 this 등록, Shutdown에서 nullptr 복원. */
 	static Game* Instance;

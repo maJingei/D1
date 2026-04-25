@@ -66,6 +66,9 @@ bool Handle_C_LOGIN(PacketSessionRef& session, Protocol::C_LOGIN& pkt)
 		Entry.AttackDamage = 5;
 		Entry.TileMoveSpeed = 6.0f;
 
+		// 봇 nameplate = 서버 전역 카운터 숫자. 사람과 시각적으로 구분되는 짧은 ID.
+		Entry.NameplateText = std::to_string(World::GetInstance().AllocNewBotId());
+
 		GameSession->SetState(ESessionState::Playing);
 		SendLoginResult(GameSession, Protocol::LR_SUCCESS, NewPlayerID);
 		World::GetInstance().EnterFromLogin(GameSession, std::move(Entry));
@@ -107,6 +110,8 @@ bool Handle_C_LOGIN(PacketSessionRef& session, Protocol::C_LOGIN& pkt)
 			}
 			// Identified entry 는 람다 스코프에서 소멸 — 이후 세션 경로에 전달하려면 값 복사 1회.
 			Entry = *EntryPtr;
+			// 사람 nameplate = 로그인 시 입력한 Account.Id 그대로. NameplateText 는 DB 미매핑이라 직접 채워준다.
+			Entry.NameplateText = Id;
 		}
 		else
 		{
@@ -147,6 +152,8 @@ bool Handle_C_LOGIN(PacketSessionRef& session, Protocol::C_LOGIN& pkt)
 
 			// 세션 경로로 전달할 값 복사(Schedule 람다 종료 시 NewEntry 는 함께 소멸).
 			Entry = *NewEntry;
+			// 신규 가입 사람도 nameplate = 입력한 Account.Id.
+			Entry.NameplateText = Id;
 		}
 
 		// 중복 로그인 체크 — World 맵에 이미 동일 AccountId 활성 세션이 있으면 거절.
@@ -181,7 +188,7 @@ bool Handle_C_MOVE(PacketSessionRef& session, Protocol::C_MOVE& pkt)
 	if (LevelID < 0)
 		return true;
 
-	World::GetInstance().GetLevel(LevelID)->DoAsync(&Level::DoTryMove, PlayerID, pkt.dir(), pkt.client_seq());
+	World::GetInstance().GetLevel(LevelID)->DoAsync(&Level::DoTryMove, PlayerID, pkt.dir(), pkt.client_seq(), pkt.client_delta_ms());
 	return true;
 }
 
@@ -205,5 +212,29 @@ bool Handle_C_ATTACK(PacketSessionRef& session, Protocol::C_ATTACK& /*pkt*/)
 		return true;
 
 	World::GetInstance().GetLevel(LevelID)->DoAsync(&Level::DoTryAttack, PlayerID);
+	return true;
+}
+
+bool Handle_C_CHAT(PacketSessionRef& session, Protocol::C_CHAT& pkt)
+{
+	auto GameSession = std::static_pointer_cast<GameServerSession>(session);
+	const uint64 PlayerID = GameSession->GetPlayerID();
+	if (PlayerID == 0)
+		return false;
+
+	const int32 LevelID = GameSession->GetLevelID();
+	if (LevelID < 0)
+		return true;
+
+	// 메시지 길이 cap — UTF-8 byte 단위. 한글이면 약 85자 정도, ASCII 면 256자.
+	// 빈 메시지는 broadcast 하지 않는다(클라 ESC/빈 엔터로 닫힌 케이스 방어).
+	static constexpr size_t MaxChatLengthBytes = 256;
+	std::string Text = pkt.text();
+	if (Text.empty())
+		return true;
+	if (Text.size() > MaxChatLengthBytes)
+		Text.resize(MaxChatLengthBytes);
+
+	World::GetInstance().GetLevel(LevelID)->DoAsync(&Level::DoBroadcastChat, PlayerID, std::move(Text));
 	return true;
 }

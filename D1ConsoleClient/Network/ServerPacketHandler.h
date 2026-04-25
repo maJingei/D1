@@ -28,6 +28,8 @@ enum : uint16
 	PKT_S_PORTAL_TELEPORT = 1016,
 	PKT_S_PLAYER_LEFT = 1017,
 	PKT_S_PLAYER_ATTACK = 1018,
+	PKT_C_CHAT = 1019,
+	PKT_S_CHAT = 1020,
 };
 
 // Custom Handlers
@@ -47,6 +49,7 @@ bool Handle_S_MONSTER_DIED(PacketSessionRef& session, Protocol::S_MONSTER_DIED& 
 bool Handle_S_PORTAL_TELEPORT(PacketSessionRef& session, Protocol::S_PORTAL_TELEPORT& pkt);
 bool Handle_S_PLAYER_LEFT(PacketSessionRef& session, Protocol::S_PLAYER_LEFT& pkt);
 bool Handle_S_PLAYER_ATTACK(PacketSessionRef& session, Protocol::S_PLAYER_ATTACK& pkt);
+bool Handle_S_CHAT(PacketSessionRef& session, Protocol::S_CHAT& pkt);
 
 class ServerPacketHandler
 {
@@ -70,6 +73,7 @@ public:
 		GPacketHandler[PKT_S_PORTAL_TELEPORT] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_PORTAL_TELEPORT>(Handle_S_PORTAL_TELEPORT, session, buffer, len); };
 		GPacketHandler[PKT_S_PLAYER_LEFT] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_PLAYER_LEFT>(Handle_S_PLAYER_LEFT, session, buffer, len); };
 		GPacketHandler[PKT_S_PLAYER_ATTACK] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_PLAYER_ATTACK>(Handle_S_PLAYER_ATTACK, session, buffer, len); };
+		GPacketHandler[PKT_S_CHAT] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_CHAT>(Handle_S_CHAT, session, buffer, len); };
 	}
 
 	static bool HandlePacket(PacketSessionRef& session, BYTE* buffer, int32 len)
@@ -81,6 +85,7 @@ public:
 	static SendBufferRef MakeSendBuffer(Protocol::C_ENTER_GAME& pkt) { return MakeSendBuffer(pkt, PKT_C_ENTER_GAME); }
 	static SendBufferRef MakeSendBuffer(Protocol::C_MOVE& pkt) { return MakeSendBuffer(pkt, PKT_C_MOVE); }
 	static SendBufferRef MakeSendBuffer(Protocol::C_ATTACK& pkt) { return MakeSendBuffer(pkt, PKT_C_ATTACK); }
+	static SendBufferRef MakeSendBuffer(Protocol::C_CHAT& pkt) { return MakeSendBuffer(pkt, PKT_C_CHAT); }
 
 private:
 	template<typename PacketType, typename ProcessFunc>

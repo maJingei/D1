@@ -5,10 +5,12 @@
 #include "GameObject/APlayerFemaleActor.h"
 #include "GameObject/APlayerDwarfActor.h"
 #include "GameObject/AMonsterActor.h"
+#include "UI/UChatPanel.h"
 #include "UI/ULoginWidget.h"
 
 #include <cstdio>
 #include <cwchar>
+#include <string>
 
 
 namespace
@@ -33,6 +35,23 @@ namespace
 	{
 		if (World == nullptr) return nullptr;
 		return World->FindPlayerActor(PlayerID);
+	}
+
+	/** UTF-8(서버 protobuf string) → UTF-16(GDI TextOutW) 변환. 빈 문자열은 빈 wstring 반환. */
+	std::wstring Utf8ToWide(const std::string& Utf8)
+	{
+		if (Utf8.empty()) 
+		{
+		    return L"";
+		}
+		const int32 RequiredLen = ::MultiByteToWideChar(CP_UTF8, 0, Utf8.data(), static_cast<int32>(Utf8.size()), nullptr, 0);
+		if (RequiredLen <= 0) 
+		{
+		    return L"";
+		}
+		std::wstring Result(static_cast<size_t>(RequiredLen), L'\0');
+		::MultiByteToWideChar(CP_UTF8, 0, Utf8.data(), static_cast<int32>(Utf8.size()), Result.data(), RequiredLen);
+		return Result;
 	}
 
 	/** World 내 AMonsterActor 중 지정 MonsterID 를 가진 액터를 찾는다. 없으면 nullptr. UWorld 의 ID 맵으로 위임 — O(1) 조회. */
@@ -140,7 +159,10 @@ bool Handle_S_ENTER_GAME(PacketSessionRef& /*session*/, Protocol::S_ENTER_GAME& 
 	std::shared_ptr<APlayerActor> MyPlayer = SpawnPlayerByType(World, MyPlayerID, MyTileX, MyTileY, pkt.character_type());
 	// 서버 기준 TileMoveSpeed 를 본인 액터에 주입 — 로컬 입력 쿨다운이 서버와 동일해지도록.
 	if (MyPlayer != nullptr)
+	{
 		MyPlayer->SetTileMoveSpeed(pkt.move_speed());
+		MyPlayer->SetNameplateText(Utf8ToWide(pkt.my_nameplate_text()));
+	}
 
 	ScreenLog(L"[Client] S_ENTER_GAME myId=%llu tile=(%d,%d) others=%d speed=%.2f type=%d",
 		MyPlayerID, MyTileX, MyTileY, pkt.others_size(), pkt.move_speed(), static_cast<int>(pkt.character_type()));
@@ -150,7 +172,9 @@ bool Handle_S_ENTER_GAME(PacketSessionRef& /*session*/, Protocol::S_ENTER_GAME& 
 	for (int32 i = 0; i < pkt.others_size(); ++i)
 	{
 		const Protocol::PlayerInfo& Info = pkt.others(i);
-		SpawnPlayerByType(World, Info.player_id(), Info.tile_x(), Info.tile_y(), Info.character_type());
+		std::shared_ptr<APlayerActor> Other = SpawnPlayerByType(World, Info.player_id(), Info.tile_x(), Info.tile_y(), Info.character_type());
+		if (Other != nullptr)
+			Other->SetNameplateText(Utf8ToWide(Info.nameplate_text()));
 	}
 
 	// 3. 몬스터 스냅샷 — Level 에 존재하는 몬스터를 한 번에 스폰
@@ -174,7 +198,9 @@ bool Handle_S_SPAWN(PacketSessionRef& /*session*/, Protocol::S_SPAWN& pkt)
 
 	ScreenLog(L"[Client] S_SPAWN id=%llu tile=(%d,%d) type=%d",	pkt.player_id(), pkt.tile_x(), pkt.tile_y(), static_cast<int>(pkt.character_type()));
 
-	SpawnPlayerByType(World, pkt.player_id(), pkt.tile_x(), pkt.tile_y(), pkt.character_type());
+	std::shared_ptr<APlayerActor> Spawned = SpawnPlayerByType(World, pkt.player_id(), pkt.tile_x(), pkt.tile_y(), pkt.character_type());
+	if (Spawned != nullptr)
+		Spawned->SetNameplateText(Utf8ToWide(pkt.nameplate_text()));
 	return true;
 }
 
@@ -369,5 +395,31 @@ bool Handle_S_PLAYER_ATTACK(PacketSessionRef& /*session*/, Protocol::S_PLAYER_AT
 
 	Player->OnServerAttack();
 	ScreenLog(L"[Client] S_PLAYER_ATTACK id=%llu", pkt.player_id());
+	return true;
+}
+
+bool Handle_S_CHAT(PacketSessionRef& /*session*/, Protocol::S_CHAT& pkt)
+{
+	// 같은 Level 내 모든 세션(보낸 본인 포함)에 broadcast 된 채팅. sender 표시는 nameplate 텍스트와 동일 문자열을 사용해 시각 일관성 유지.
+	Game* Instance = Game::GetInstance();
+	if (Instance == nullptr) return false;
+	UChatPanel* Panel = Instance->GetChatPanel();
+	if (Panel == nullptr) return true;
+
+	UWorld* World = Instance->GetWorld();
+
+	// sender_id → PlayerActor 캐시에서 nameplate 조회. sender 가 이미 사라졌으면 ID 숫자로 폴백.
+	std::wstring SenderText;
+	if (auto Player = FindPlayerActor(World, pkt.sender_id()))
+	{
+		SenderText = Player->GetNameplateText();
+	}
+	if (SenderText.empty())
+	{
+		SenderText = std::to_wstring(pkt.sender_id());
+	}
+
+	const std::wstring Body = Utf8ToWide(pkt.text());
+	Panel->AddLine(L"[" + SenderText + L"] " + Body);
 	return true;
 }

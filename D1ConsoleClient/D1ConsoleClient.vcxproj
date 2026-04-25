@@ -197,6 +197,7 @@
     <ClCompile Include="UI\UPasswordField.cpp" />
     <ClCompile Include="UI\UButton.cpp" />
     <ClCompile Include="UI\ULoginWidget.cpp" />
+    <ClCompile Include="UI\UChatPanel.cpp" />
     <ClCompile Include="World\UWorld.cpp" />
     <ClCompile Include="World\UTileMap.cpp" />
     <ClCompile Include="$(SolutionDir)Common\UCollisionMap.cpp" />
@@ -227,6 +228,7 @@
     <ClInclude Include="UI\UPasswordField.h" />
     <ClInclude Include="UI\UButton.h" />
     <ClInclude Include="UI\ULoginWidget.h" />
+    <ClInclude Include="UI\UChatPanel.h" />
     <ClInclude Include="World\UWorld.h" />
     <ClInclude Include="World\UTileMap.h" />
     <ClInclude Include="$(SolutionDir)Common\UCollisionMap.h" />

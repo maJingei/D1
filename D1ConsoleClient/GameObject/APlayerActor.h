@@ -4,6 +4,7 @@
 #include "Protocol.pb.h"
 
 #include <memory>
+#include <string>
 #include <vector>
 
 class UHealthBarWidget;
@@ -69,6 +70,10 @@ public:
 	/** 서버가 S_ENTER_GAME 으로 내려 준 TileMoveSpeed 를 반영한다. 로컬 입력 쿨다운이 서버와 동일해지도록. */
 	void SetTileMoveSpeed(float InSpeed) { TileMoveSpeed = InSpeed; }
 
+	/** 서버가 S_ENTER_GAME(my/others) 또는 S_SPAWN 으로 내려 준 nameplate 텍스트를 적용. 머리 위 렌더에 사용. */
+	void SetNameplateText(std::wstring InText) { NameplateText = std::move(InText); }
+	const std::wstring& GetNameplateText() const { return NameplateText; }
+
 	/** Portal 전이 등 외부 이유로 pending snapshot 을 전량 폐기해야 할 때 호출한다. */
 	void ClearSnapshotQueue();
 
@@ -119,6 +124,9 @@ private:
 	/** 플레이어 머리 위에 렌더되는 체력바. APlayerActor 가 소유(World Actor 아님). */
 	std::unique_ptr<UHealthBarWidget> HealthBar;
 
+	/** 서버가 부여한 nameplate 표시 텍스트(사람=Account.Id, 봇=카운터). 비어 있으면 렌더 스킵. */
+	std::wstring NameplateText;
+
 	/** 픽셀/초 — 생성자에서 ACharacterActor::MoveSpeed 에 덮어쓴다. */
 	static constexpr float PlayerMoveSpeed = 260.f;
 
@@ -130,4 +138,7 @@ private:
 
 	/** replay 중 MoveSpeed 증폭 배율. 클수록 빠르게 복구하지만 너무 크면 스르륵 감각이 사라진다. */
 	static constexpr float ReplayMoveSpeedMultiplier = 4.0f;
+
+	/** 체력바 윗변에서 nameplate baseline 까지의 픽셀 거리. 위로 띄울수록 캐릭터와 텍스트가 분리되어 보인다. */
+	static constexpr int32 NameplateOffsetAboveHealthBar = 10;
 };

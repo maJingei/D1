@@ -13,6 +13,7 @@
 #include "Render/ResourceManager.h"
 #include "Render/Sprite.h"
 #include "UI/UHealthBarWidget.h"
+#include "UI/UChatPanel.h"
 #include "World/UWorld.h"
 #include "UCollisionMap.h"
 
@@ -107,11 +108,26 @@ void APlayerActor::Render(HDC BackDC)
 	ACharacterActor::Render(BackDC);
 
 	// 2. 체력바 — 플레이어 머리 위 앵커. 캐릭터 발 위치(X,Y) 기준으로 중앙 위.
+	const int32 AnchorX = static_cast<int32>(X) + TileSize / 2;
+	const int32 AnchorY = static_cast<int32>(Y) + (TileSize - RenderSize); // 스프라이트 상단 Y
 	if (HealthBar)
 	{
-		const int32 AnchorX = static_cast<int32>(X) + TileSize / 2;
-		const int32 AnchorY = static_cast<int32>(Y) + (TileSize - RenderSize); // 스프라이트 상단 Y
 		HealthBar->Render(BackDC, AnchorX, AnchorY);
+	}
+
+	// 3. Nameplate — 체력바 위로 한 줄. 비어 있으면 스킵.
+	//    GDI 정렬 상태를 일시 변경해 텍스트 중앙 + 하단 baseline 으로 출력 후 원복.
+	if (NameplateText.empty() == false)
+	{
+		const int32 NameY = AnchorY - NameplateOffsetAboveHealthBar;
+		const UINT OldAlign = ::GetTextAlign(BackDC);
+		const COLORREF OldColor = ::SetTextColor(BackDC, RGB(255, 255, 255));
+		const int32 OldBkMode = ::SetBkMode(BackDC, TRANSPARENT);
+		::SetTextAlign(BackDC, TA_CENTER | TA_BOTTOM);
+		::TextOutW(BackDC, AnchorX, NameY, NameplateText.c_str(), static_cast<int32>(NameplateText.size()));
+		::SetTextAlign(BackDC, OldAlign);
+		::SetTextColor(BackDC, OldColor);
+		::SetBkMode(BackDC, OldBkMode);
 	}
 }
 
@@ -149,6 +165,18 @@ void APlayerActor::OnServerDamaged(int32 InHP, int32 InMaxHP)
 
 void APlayerActor::ProcessInput()
 {
+	// 채팅 입력 활성 중에는 캐릭터 이동/공격 키를 모두 무시 — 채팅 키와 게임 키가 같은 키보드 이벤트로 들어오므로 가드 필요.
+	if (Game* Instance = Game::GetInstance())
+	{
+		if (UChatPanel* Panel = Instance->GetChatPanel())
+		{
+			if (Panel->IsInputActive())
+			{
+				return;
+			}
+		}
+	}
+
 	// 공격 입력은 이동보다 우선. 공격 중이면 이동 입력은 받지 않는다.
 	if (InputManager::Get().GetKeyDown(EKey::Space))
 	{
@@ -222,13 +250,17 @@ void APlayerActor::HandleMoveInput()
 	// 2) 로컬 예측 — 즉시 타일 갱신 + 픽셀 보간 시작.
 	BeginMoveTo(NextTileX, NextTileY);
 
-	// 3) 입력 쿨다운 타이머 갱신. 서버와 동일한 기준이므로 reject 가 일어나지 않는다.
+	// 3) 직전 송신 후 경과 ms 캡처(첫 패킷은 0). LastMoveTimeMs 갱신 전에 계산해야 0이 박히지 않는다.
+	const uint64 ClientDeltaMs = (LastMoveTimeMs == 0) ? 0 : (NowMs - LastMoveTimeMs);
+
+	// 4) 입력 쿨다운 타이머 갱신. 서버와 동일한 기준이므로 reject 가 일어나지 않는다.
 	LastMoveTimeMs = NowMs;
 
-	// 4) C_MOVE 송신 — Direction + ClientSeq. 서버는 자체 TileX/Y 기준으로 검증하고 실패 시에만 회신한다.
+	// 5) C_MOVE 송신 — Direction + ClientSeq + ClientDelta. 서버 cooldown 검증은 서버시간 단독, ClientDelta 는 참고용.
 	Protocol::C_MOVE MovePkt;
 	MovePkt.set_dir(Dir);
 	MovePkt.set_client_seq(ClientSeq);
+	MovePkt.set_client_delta_ms(ClientDeltaMs);
 	Client->Send(ServerPacketHandler::MakeSendBuffer(MovePkt));
 }
 

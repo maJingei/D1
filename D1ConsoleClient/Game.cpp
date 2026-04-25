@@ -21,12 +21,29 @@
 #include "Iocp/IocpCore.h"
 
 #include "UI/ULoginWidget.h"
+#include "UI/UChatPanel.h"
+
+#include "Iocp/Session.h"
+#include "Protocol.pb.h"
+
+#include <string>
 
 // 전역 Game 접근점. Packet Handler가 World/Debug 버퍼에 접근하기 위한 통로.
 Game* Game::Instance = nullptr;
 
 namespace
 {
+	/** UTF-16(GDI/wstring) → UTF-8(protobuf string). 빈 문자열은 빈 std::string 반환. */
+	std::string WideToUtf8(const std::wstring& Wide)
+	{
+		if (Wide.empty()) return std::string();
+		const int32 RequiredLen = ::WideCharToMultiByte(CP_UTF8, 0, Wide.data(), static_cast<int32>(Wide.size()), nullptr, 0, nullptr, nullptr);
+		if (RequiredLen <= 0) return std::string();
+		std::string Result(static_cast<size_t>(RequiredLen), '\0');
+		::WideCharToMultiByte(CP_UTF8, 0, Wide.data(), static_cast<int32>(Wide.size()), Result.data(), RequiredLen, nullptr, nullptr);
+		return Result;
+	}
+
 #ifdef STRESS_DEBUG_HOOKS
 	// S2 재현 훅: 대용량 echo 완료 직후 SO_LINGER={1,0} + closesocket로 RST 유도.
 	// 본격 활용 시 키보드 핫키(F7 등)에서 호출.
@@ -147,11 +164,18 @@ void Game::Run()
 		// 2. 시간 업데이트
 		TimeManager::Get().Update();
 		
-		// ESC 키로 게임 종료
+		// ESC — 채팅 입력 활성 중에는 채팅 취소가 우선, 그 외에는 게임 종료.
 		if (InputManager::Get().GetKeyDown(EKey::Escape))
 		{
-			bIsRunning = false;
-			break;
+			if (ChatPanel != nullptr && ChatPanel->IsInputActive())
+			{
+				ChatPanel->CancelInput();
+			}
+			else
+			{
+				bIsRunning = false;
+				break;
+			}
 		}
 		
 		// 3. 게임 로직 업데이트
@@ -163,6 +187,15 @@ void Game::Run()
 		{
 			if (World != nullptr)
 				World->Render(Renderer::Get().GetBackBufferDC());
+
+			// 채팅 패널 — World 위에 좌하단 오버레이로 합성. 패널 좌상단 좌표는 화면 크기 기준으로 산출.
+			if (ChatPanel != nullptr)
+			{
+				constexpr int32 ChatPanelMargin = 10;
+				const int32 ChatX = ChatPanelMargin;
+				const int32 ChatY = WindowHeight - UChatPanel::PanelHeight - ChatPanelMargin;
+				ChatPanel->Render(Renderer::Get().GetBackBufferDC(), ChatX, ChatY);
+			}
 		}
 		else // EGameState::Login
 		{
@@ -203,8 +236,11 @@ void Game::BeginPlay()
 	// 2. Network 초기화
 	// ClientService 기동 및 서버에 Connect. 워커 스레드는 생성하지 않고
 	// IocpCore::Dispatch(0)을 Tick에서 비차단으로 펌핑한다.
-	Network = std::make_shared<ClientService>(NetAddress("127.0.0.1", 9999),
-		[]() -> SessionRef { return std::make_shared<GameClientSession>(); });
+#ifdef _DEBUG
+	Network = std::make_shared<ClientService>(NetAddress("127.0.0.1", 9999), []() -> SessionRef { return std::make_shared<GameClientSession>(); });
+#else
+	Network = std::make_shared<ClientService>(NetAddress("112.151.114.88", 9999), []() -> SessionRef { return std::make_shared<GameClientSession>(); });
+#endif
 	if (Network->Start() == false)
 	{
 		::OutputDebugStringA("[Game] ClientService Start failed\n");
@@ -216,6 +252,9 @@ void Game::BeginPlay()
 
 	// 3. 월드 생성
 	World = std::make_unique<UWorld>();
+
+	// 3.4 채팅 패널 — InGame 상태 좌하단에 항상 표시. Login 동안엔 Render 분기에서 자동으로 그려지지 않는다.
+	ChatPanel = std::make_unique<UChatPanel>();
 
 	// 3.5 로그인 위젯 생성 — env(D1_LOGIN_ID/PW) 둘 다 설정된 경우에만 숨기고 OnConnected 에서 자동 로그인.
 	//     env 없으면 기본 Visible(true) 상태로 사용자 입력 대기.
@@ -240,6 +279,32 @@ void Game::Tick(float DeltaTime)
 	// Scene 분기 — Login 일 땐 World 를 Tick 하지 않아 몬스터/플레이어 액터 상태가 멈춘다.
 	if (CurrentState == EGameState::InGame)
 	{
+		// 채팅 엔터 토글: 비활성 → 입력 모드 진입 / 활성 → 메시지 전송 후 모드 종료.
+		// World->Tick 보다 먼저 처리해야 같은 프레임의 캐릭터 입력이 채팅 활성 상태에서 차단된다.
+		if (ChatPanel != nullptr && InputManager::Get().GetKeyDown(EKey::Enter))
+		{
+			if (ChatPanel->IsInputActive())
+			{
+				const std::wstring& InputText = ChatPanel->GetInputText();
+				if (InputText.empty() == false && ClientSession != nullptr)
+				{
+					Protocol::C_CHAT Pkt;
+					Pkt.set_text(WideToUtf8(InputText));
+					ClientSession->Send(ServerPacketHandler::MakeSendBuffer(Pkt));
+				}
+				ChatPanel->ClearInputAndEndMode();
+			}
+			else
+			{
+				ChatPanel->BeginInput();
+			}
+		}
+
+		if (ChatPanel != nullptr)
+		{
+			ChatPanel->Tick(DeltaTime);
+		}
+
 		if (World != nullptr)
 			World->Tick(DeltaTime);
 	}
@@ -263,6 +328,7 @@ void Game::EndPlay()
 {
 	World.reset();
 	LoginWidget.reset();
+	ChatPanel.reset();
 
 	if (Network != nullptr)
 	{

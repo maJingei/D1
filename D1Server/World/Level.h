@@ -53,8 +53,11 @@ public:
 	 */
 	void DoRemovePlayer(uint64 PlayerID);
 
-	/** TryMove 내부 구현 — Job 직렬화 안에서 실행. */
-	void DoTryMove(uint64 PlayerID, Protocol::Direction Dir, uint64 ClientSeq);
+	/**
+	 * TryMove 내부 구현 — Job 직렬화 안에서 실행. Cooldown 은 서버시간(LastServerAcceptMs 대비 ServerDelta) 단독으로 검증한다.
+	 * ClientDeltaMs 는 클라가 보고한 직전 송신 후 경과 ms — 검증에는 사용하지 않고 추후 reconciliation 보조값으로만 보관.
+	 */
+	void DoTryMove(uint64 PlayerID, Protocol::Direction Dir, uint64 ClientSeq, uint64 ClientDeltaMs);
 
 	/**
 	 * Portal 접촉 후 Level 전이 내부 구현. 현재 Level 에서 플레이어를 제거하고 S_PLAYER_LEFT 를 브로드캐스트한 뒤,
@@ -70,6 +73,9 @@ public:
 
 	/** Broadcast 내부 구현 — Job 직렬화 안에서 실행. */
 	void DoBroadcast(SendBufferRef Buffer, uint64 ExceptID);
+
+	/** 채팅 broadcast 내부 구현 — Job 직렬화 안에서 S_CHAT 패킷을 만들고 같은 Level 의 모든 세션(본인 포함)에 송신. */
+	void DoBroadcastChat(uint64 SenderID, std::string Text);
 
 	/** 메인 Tick 루프에서 동기 호출. DeltaTime(초) 을 받아 Monster 들을 순회하며 이동·공격 판정을 수행한다. */
 	void Tick(float DeltaTime);

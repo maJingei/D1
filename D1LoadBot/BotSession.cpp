@@ -130,9 +130,13 @@ namespace D1LoadBot
 
 		const uint64 Seq = NextMoveSeq++;
 
+		// 직전 송신 후 경과 ms — PumpMove 가 LastMoveSentAt 을 이 함수 진입 직전에 갱신하므로
+		// 호출자 쪽에서 capture 한 값이 필요하나, 봇은 검증·로깅 용도로만 보내기 때문에 0 으로 둔다.
+		// (서버는 ClientDelta 를 검증에 쓰지 않으며, 봇은 reconciliation 도 수행하지 않음.)
 		Protocol::C_MOVE Move;
 		Move.set_dir(static_cast<Protocol::Direction>(Dir));
 		Move.set_client_seq(Seq);
+		Move.set_client_delta_ms(0);
 
 		Send(MakeBotSendBuffer(Move, PKT_C_MOVE));
 	}
