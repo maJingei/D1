@@ -77,6 +77,12 @@ public:
 	/** 채팅 broadcast 내부 구현 — Job 직렬화 안에서 S_CHAT 패킷을 만들고 같은 Level 의 모든 세션(본인 포함)에 송신. */
 	void DoBroadcastChat(uint64 SenderID, std::string Text);
 
+	/**
+	 * F8 디버그 시연 — 해당 PlayerEntry 의 DebugForceRejectCountdown / DebugCooldownBypassRemaining 을 함께 세팅한다.
+	 * 이후 BypassCount 개의 C_MOVE 동안은 cooldown 검사를 skip 하고, 그중 NthPacket 번째 패킷만 강제 reject 처리된다.
+	 */
+	void DoSetDebugForceReject(uint64 PlayerID, uint32 NthPacket, uint32 BypassCount);
+
 	/** 메인 Tick 루프에서 동기 호출. DeltaTime(초) 을 받아 Monster 들을 순회하며 이동·공격 판정을 수행한다. */
 	void Tick(float DeltaTime);
 
@@ -127,9 +133,9 @@ public:
 	/** Level 내부 PortalID 발급 카운터. */
 	uint64 NextPortalID = 1;
 
-	/** 몬스터 초기 스폰 고정 좌표. */
-	static constexpr int32 MonsterSpawnTileX = 10;
-	static constexpr int32 MonsterSpawnTileY = 10;
+	// 몬스터 초기 스폰 고정 좌표(과거): 단일 (10,10) 하드코딩 → LevelConfig.h::LevelMonsterSpawns[LevelID] 로 이전.
+	// static constexpr int32 MonsterSpawnTileX = 10;
+	// static constexpr int32 MonsterSpawnTileY = 10;
 
 	/** 플레이어 기본 이동 속도 (tiles/sec). 스폰 시 PlayerEntry::TileMoveSpeed 에 세팅하고 S_ENTER_GAME 으로 클라에 동기화. */
 	static constexpr float DefaultPlayerTileMoveSpeed = 6.0f;

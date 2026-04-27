@@ -36,8 +36,10 @@ public:
 	static const FTileLayerEntry TileLayerEntries[];
 	static const int32 TileLayerEntryCount;
 
-	/** 충돌 맵 CSV 경로 (0=통행, 1=차단). 렌더링하지 않는 논리 전용 레이어. */
-	static const wchar_t* const CollisionMapPath;
+	// 마일스톤 1: 충돌 맵 CSV 파일명은 LevelConfig.h::LevelCollisionFiles[LevelID] 로 이전됨.
+	// 기존 단일 상수는 호출 지점이 ResolveLevelPath + LevelCollisionFiles 조합으로 대체되어 더 이상 필요하지 않다.
+	// /** 충돌 맵 CSV 경로 (0=통행, 1=차단). 렌더링하지 않는 논리 전용 레이어. */
+	// static const wchar_t* const CollisionMapPath;
 
 public:
 	static ResourceManager& Get();
@@ -62,6 +64,12 @@ public:
 
 	/** 지정 LevelID 의 충돌 맵 CSV 를 로드하여 UCollisionMap 인스턴스를 생성한다. */
 	std::shared_ptr<UCollisionMap> LoadCollisionMap(int32 LevelID);
+
+	/**
+	 * 마일스톤 1: 지정 LevelID 의 단일 배경 이미지 PNG 를 로드하여 Texture 로 캐싱한다.
+	 * LevelUseSingleImage[LevelID] == false 거나 LevelBackgroundImages[LevelID] 가 비어 있으면 nullptr 을 반환한다.
+	 */
+	std::shared_ptr<Texture> LoadLevelBackground(int32 LevelID);
 
 private:
 	ResourceManager() = default;

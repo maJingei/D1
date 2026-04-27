@@ -13,6 +13,7 @@
 #include "Input/InputManager.h"
 #include "Render/Renderer.h"
 #include "Render/ResourceManager.h"
+#include "Render/Texture.h"
 
 #include "Network/ClientService.h"
 #include "Network/ServerPacketHandler.h"
@@ -203,17 +204,18 @@ void Game::Run()
 				LoginWidget->Render(Renderer::Get().GetBackBufferDC(), 0, 0);
 		}
 		// 디버그 오버레이 — 월드 위에, 화면 합성 전에 그린다.
-		{
-			constexpr int32 OverlayLeft = 8;
-			constexpr int32 OverlayTop  = 8;
-			constexpr int32 LineHeight  = 14;
-			int32 LineIndex = 0;
-			for (const std::wstring& Line : DebugLogs)
-			{
-				Renderer::Get().DrawDebugText(OverlayLeft, OverlayTop + LineIndex * LineHeight, Line.c_str());
-				++LineIndex;
-			}
-		}
+		// 렌더링 비활성화: 좌상단 흰색 로그 출력을 끔. AddDebugLog/DebugLogs 큐는 유지(추후 토글 복구용).
+		//{
+		//	constexpr int32 OverlayLeft = 8;
+		//	constexpr int32 OverlayTop  = 8;
+		//	constexpr int32 LineHeight  = 14;
+		//	int32 LineIndex = 0;
+		//	for (const std::wstring& Line : DebugLogs)
+		//	{
+		//		Renderer::Get().DrawDebugText(OverlayLeft, OverlayTop + LineIndex * LineHeight, Line.c_str());
+		//		++LineIndex;
+		//	}
+		//}
 		Renderer::Get().EndRender();
 
 		// 프레임 말미 — 목표 프레임 시간에서 실제 소요 시간을 뺀 만큼 sleep.
@@ -234,13 +236,7 @@ void Game::BeginPlay()
 	ServerPacketHandler::Init();
 
 	// 2. Network 초기화
-	// ClientService 기동 및 서버에 Connect. 워커 스레드는 생성하지 않고
-	// IocpCore::Dispatch(0)을 Tick에서 비차단으로 펌핑한다.
-#ifdef _DEBUG
 	Network = std::make_shared<ClientService>(NetAddress("127.0.0.1", 9999), []() -> SessionRef { return std::make_shared<GameClientSession>(); });
-#else
-	Network = std::make_shared<ClientService>(NetAddress("112.151.114.88", 9999), []() -> SessionRef { return std::make_shared<GameClientSession>(); });
-#endif
 	if (Network->Start() == false)
 	{
 		::OutputDebugStringA("[Game] ClientService Start failed\n");
@@ -347,21 +343,15 @@ void Game::LoadResources()
 		ResourceManager::Get().Load(Entry.Name, Entry.Path);
 	}
 
-	// 모든 Level 의 타일 레이어/충돌 맵을 프리로드 — 포탈 전이 시 디스크 재로드 없이 CurrentLevelID 스위칭만으로 교체된다.
+	// 모든 Level 의 정적 자산을 프리로드 — 포탈 전이 시 디스크 재로드 없이 CurrentLevelID 스위칭만으로 교체된다.
+	// 마일스톤 2 이후: 모든 Level 이 단일 배경 이미지 모드로 통일되어 3-레이어 분기 제거됨.
 	for (int32 LevelID = 0; LevelID < LEVEL_COUNT; LevelID++)
 	{
-		// TileLayerEntries 순회 — 레이어 순서대로 해당 LevelID 슬롯에 등록.
-		for (int32 i = 0; i < ResourceManager::TileLayerEntryCount; i++)
-		{
-			const FTileLayerEntry& Entry = ResourceManager::TileLayerEntries[i];
-			auto TileMap = std::make_unique<UTileMap>();
-			if (TileMap->Load(ResourceManager::Get().ResolveLevelPath(LevelID, Entry.CsvPath), Entry.TilesetName))
-			{
-				World->AddTileLayer(LevelID, std::move(TileMap));
-			}
-		}
+		// 배경 PNG 한 장 로드 후 UWorld 슬롯에 주입.
+		std::shared_ptr<Texture> BackgroundImage = ResourceManager::Get().LoadLevelBackground(LevelID);
+		World->SetBackgroundImage(LevelID, BackgroundImage);
 
-		// 충돌 맵 로드: 렌더 레이어와 분리된 단일 논리 레이어
+		// 충돌 맵 로드: 파일명은 LevelCollisionFiles[LevelID] 로 결정됨.
 		World->SetCollisionMap(LevelID, ResourceManager::Get().LoadCollisionMap(LevelID));
 	}
 }

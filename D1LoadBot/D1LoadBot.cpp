@@ -38,7 +38,7 @@ namespace
 	struct FBotSettings
 	{
 		/** 동시 접속 봇 세션 수. */
-		uint32 SessionCount = 300;
+		uint32 SessionCount = 30;
 
 		/** C_MOVE 전송 주기 (밀리초). */
 		uint32 MoveIntervalMs = 200;

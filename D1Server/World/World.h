@@ -20,20 +20,13 @@ class World
 {
 public:
 	/**
-	 * Level 별 Portal 구성. 인덱스 = LevelID. 원형 체인 토폴로지.
-	 * 모든 Level 은 우측 (29,10) 에 포탈이 있고 다음 Level ((LevelID+1) % LEVEL_COUNT) 의 좌측 (0,10) 으로 전이된다.
+	 * Level 별 Portal 구성. 인덱스 = LevelID. 두 Level 간 원형 체인.
+	 * Level1(idx0) 출구 (29,10) → Level2 입구 (0,10) (row 10 전 칸 walkable 통로),
+	 * Level2(idx1) 출구 (29,11) → Level1 입구 (0,10).
 	 */
 	static constexpr FPortalConfig LevelPortalConfigs[LEVEL_COUNT] = {
 		{ /*TileX*/ 29, /*TileY*/ 10, /*TargetLevelID*/ 1, /*TargetSpawnTileX*/ 0, /*TargetSpawnTileY*/ 10 },
-		{ /*TileX*/ 29, /*TileY*/ 10, /*TargetLevelID*/ 2, /*TargetSpawnTileX*/ 0, /*TargetSpawnTileY*/ 10 },
-		{ /*TileX*/ 29, /*TileY*/ 10, /*TargetLevelID*/ 3, /*TargetSpawnTileX*/ 0, /*TargetSpawnTileY*/ 10 },
-		{ /*TileX*/ 29, /*TileY*/ 10, /*TargetLevelID*/ 4, /*TargetSpawnTileX*/ 0, /*TargetSpawnTileY*/ 10 },
-		{ /*TileX*/ 29, /*TileY*/ 10, /*TargetLevelID*/ 5, /*TargetSpawnTileX*/ 0, /*TargetSpawnTileY*/ 10 },
-		{ /*TileX*/ 29, /*TileY*/ 10, /*TargetLevelID*/ 6, /*TargetSpawnTileX*/ 0, /*TargetSpawnTileY*/ 10 },
-		{ /*TileX*/ 29, /*TileY*/ 10, /*TargetLevelID*/ 7, /*TargetSpawnTileX*/ 0, /*TargetSpawnTileY*/ 10 },
-		{ /*TileX*/ 29, /*TileY*/ 10, /*TargetLevelID*/ 8, /*TargetSpawnTileX*/ 0, /*TargetSpawnTileY*/ 10 },
-		{ /*TileX*/ 29, /*TileY*/ 10, /*TargetLevelID*/ 9, /*TargetSpawnTileX*/ 0, /*TargetSpawnTileY*/ 10 },
-		{ /*TileX*/ 29, /*TileY*/ 10, /*TargetLevelID*/ 0, /*TargetSpawnTileX*/ 0, /*TargetSpawnTileY*/ 10 },
+		{ /*TileX*/ 29, /*TileY*/ 11, /*TargetLevelID*/ 0, /*TargetSpawnTileX*/ 0, /*TargetSpawnTileY*/ 10 },
 	};
 
 	static World& GetInstance();

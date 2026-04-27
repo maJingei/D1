@@ -30,6 +30,7 @@ enum : uint16
 	PKT_S_PLAYER_ATTACK = 1018,
 	PKT_C_CHAT = 1019,
 	PKT_S_CHAT = 1020,
+	PKT_C_DEBUG_FORCE_REJECT = 1021,
 };
 
 // Custom Handlers
@@ -86,6 +87,7 @@ public:
 	static SendBufferRef MakeSendBuffer(Protocol::C_MOVE& pkt) { return MakeSendBuffer(pkt, PKT_C_MOVE); }
 	static SendBufferRef MakeSendBuffer(Protocol::C_ATTACK& pkt) { return MakeSendBuffer(pkt, PKT_C_ATTACK); }
 	static SendBufferRef MakeSendBuffer(Protocol::C_CHAT& pkt) { return MakeSendBuffer(pkt, PKT_C_CHAT); }
+	static SendBufferRef MakeSendBuffer(Protocol::C_DEBUG_FORCE_REJECT& pkt) { return MakeSendBuffer(pkt, PKT_C_DEBUG_FORCE_REJECT); }
 
 private:
 	template<typename PacketType, typename ProcessFunc>

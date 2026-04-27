@@ -3,6 +3,7 @@
 #include "DB/DBConnection.h"
 #include "DB/DBContext.h"
 #include "DB/DBJobQueue.h"
+#include "LevelConfig.h"
 #include "Network/ClientPacketHandler.h"
 #include "Network/GameServerSession.h"
 #include "World/World.h"
@@ -21,9 +22,18 @@ void Level::Init(const std::string& CollisionCsvPath, int32 InLevelID, const FPo
 
 	std::shared_ptr<Level> Self = std::static_pointer_cast<Level>(shared_from_this());
 
-	// 고정 좌표에 Monster 1마리 스폰.
-	const uint64 MonsterID = NextMonsterID++;
-	Monsters[MonsterID] = std::make_shared<AMonsterActor>(MonsterID, MonsterSpawnTileX, MonsterSpawnTileY, Self);
+	// LevelConfig.h::LevelMonsterSpawns[LevelID] 정적 테이블을 그대로 순회 — Level 별로 종류/좌표가 다르다.
+	// Level1: Slime 1마리 (10,10) / Level2: Slime/Minotaur/RedOrc/GreenOrc 4마리.
+	if (LevelID >= 0 && LevelID < AVAILABLE_LEVEL_COUNT)
+	{
+		const MonsterSpawnTable& SpawnTable = LevelMonsterSpawns[LevelID];
+		for (int32 i = 0; i < SpawnTable.Count; ++i)
+		{
+			const MonsterSpawnInfo& Info = SpawnTable.Entries[i];
+			const uint64 MonsterID = NextMonsterID++;
+			Monsters[MonsterID] = std::make_shared<AMonsterActor>(MonsterID, Info.TileX, Info.TileY, Self, Info.Type);
+		}
+	}
 
 	// Portal 1개 스폰 — 좌표/대상은 World 가 Level 별로 주입한 FPortalConfig 에서 받는다.
 	const uint64 PortalID = NextPortalID++;
@@ -112,7 +122,8 @@ void Level::DoEnter(uint64 PlayerID, std::shared_ptr<GameServerSession> Session,
 	NewEntry.TileY = TileY;
 	NewEntry.TileMoveSpeed = DefaultPlayerTileMoveSpeed;
 	NewEntry.bJustTeleported = bFromPortal;
-	NewEntry.CharacterType = static_cast<Protocol::CharacterType>(PlayerID % 3);
+	// 레거시 진입 경로(Handle_C_ENTER_GAME 폴백). 사람 클라 디폴트는 신규 4방향 PlayerSprite(CT_DEFAULT).
+	NewEntry.CharacterType = Protocol::CT_DEFAULT;
 
 	DoEnterWithState(std::move(NewEntry), std::move(Session));
 }
@@ -165,6 +176,7 @@ void Level::DoEnterWithState(PlayerEntry InitialEntry, std::shared_ptr<GameServe
 		MI->set_monster_id(MID);
 		MI->set_tile_x(Monster->GetTileX());
 		MI->set_tile_y(Monster->GetTileY());
+		MI->set_monster_type(Monster->GetMonsterType());
 	}
 	Session->Send(ClientPacketHandler::MakeSendBuffer(EnterRes));
 
@@ -409,15 +421,16 @@ bool Level::ValidateMove(const PlayerEntry& Self, int32 NextTileX, int32 NextTil
 	if (CollisionMap == nullptr || CollisionMap->IsBlocked(NextTileX, NextTileY))
 		return false;
 
-	// 3) Player 간 충돌 검사 — 현재는 비활성. LoadBot 다량 접속 시 시각적 다양성 확보 +
-	//    서버 reject 폭증을 막기 위해 Player 끼리 같은 타일을 공유 가능. DB/팀 기능 도입 시 재활성 검토.
-	// for (const auto& Pair : Players)
-	// {
-	//     if (Pair.first == Self.PlayerID) continue;
-	//     if (Pair.second.bIsDead) continue;
-	//     if (Pair.second.TileX == NextTileX && Pair.second.TileY == NextTileY)
-	//         return false;
-	// }
+	// 3) Player 간 충돌 검사 — 자기 자신과 사망자는 제외하고, 살아있는 다른 플레이어가 점유 중이면 차단.
+	for (const auto& Pair : Players)
+	{
+		if (Pair.first == Self.PlayerID)
+			continue;
+		if (Pair.second.bIsDead)
+			continue;
+		if (Pair.second.TileX == NextTileX && Pair.second.TileY == NextTileY)
+			return false;
+	}
 
 	// 4) 몬스터 점유 검사.
 	for (const auto& Pair : Monsters)
@@ -445,6 +458,36 @@ void Level::DoTryMove(uint64 PlayerID, Protocol::Direction Dir, uint64 ClientSeq
 	if (ClientSeq <= Self.LastAcceptedSeq)
 		return;
 
+	// F8 디버그 시연 — burst 송신을 위해 cooldown 면제, 그리고 N 번째 패킷 강제 reject. _DEBUG 빌드에서만 분기에 실제 들어간다.
+	bool bDebugSkipCooldown = false;
+#ifdef _DEBUG
+	if (Self.DebugCooldownBypassRemaining > 0)
+	{
+		bDebugSkipCooldown = true;
+		--Self.DebugCooldownBypassRemaining;
+	}
+	if (Self.DebugForceRejectCountdown > 0)
+	{
+		--Self.DebugForceRejectCountdown;
+		if (Self.DebugForceRejectCountdown == 0)
+		{
+			// reject 발급 후에는 LastServerAcceptMs/LastAcceptedSeq 갱신 없이 즉시 return — 클라가 OnServerMoveRejected
+			// → snap → StageReplayFromSnapshots 흐름을 그대로 타며, 큐에 남은 후속 Dir 들은 4 배속 replay 로 따라잡는다.
+			Protocol::S_MOVE_REJECT RejectPkt;
+			RejectPkt.set_player_id(PlayerID);
+			RejectPkt.set_tile_x(Self.TileX);
+			RejectPkt.set_tile_y(Self.TileY);
+			RejectPkt.set_client_seq(ClientSeq);
+			RejectPkt.set_last_accepted_seq(Self.LastAcceptedSeq);
+			if (auto Locked = Self.Session.lock())
+			{
+				Locked->Send(ClientPacketHandler::MakeSendBuffer(RejectPkt));
+			}
+			return;
+		}
+	}
+#endif
+
 	// 방향 → 델타 변환. 유효하지 않은 enum 값은 ValidateMove 의 인접 타일 검사에서 걸러진다.
 	int32 DeltaX = 0;
 	int32 DeltaY = 0;
@@ -467,7 +510,7 @@ void Level::DoTryMove(uint64 PlayerID, Protocol::Direction Dir, uint64 ClientSeq
 	const float CooldownMs = 1000.0f / Self.TileMoveSpeed;
 	static constexpr int64 JitterMarginMs = 100;
 
-	if (Self.LastServerAcceptMs != 0)
+	if (!bDebugSkipCooldown && Self.LastServerAcceptMs != 0)
 	{
 		const uint64 ServerDelta = NowMs - Self.LastServerAcceptMs;
 		if (static_cast<float>(ServerDelta) + static_cast<float>(JitterMarginMs) < CooldownMs)
@@ -595,6 +638,33 @@ void Level::DoBroadcast(SendBufferRef Buffer, uint64 ExceptID)
 
 	for (const auto& Session : Targets)
 		Session->Send(Buffer);
+}
+
+void Level::DoSetDebugForceReject(uint64 PlayerID, uint32 NthPacket, uint32 BypassCount)
+{
+#ifdef _DEBUG
+	auto It = Players.find(PlayerID);
+	if (It == Players.end())
+	{
+		return;
+	}
+	// NthPacket==0 또는 BypassCount==0 은 비활성 의미라 무시. burst 시연이 아닌 잘못된 페이로드 방어.
+	if (NthPacket == 0 || BypassCount == 0)
+	{
+		return;
+	}
+	// reject 위치(N) 가 burst 범위(M) 를 벗어나면 그 burst 안에 reject 시점이 없다는 뜻이라 무의미 — 무시.
+	if (NthPacket > BypassCount)
+	{
+		return;
+	}
+	It->second.DebugForceRejectCountdown = NthPacket;
+	It->second.DebugCooldownBypassRemaining = BypassCount;
+#else
+	(void)PlayerID;
+	(void)NthPacket;
+	(void)BypassCount;
+#endif
 }
 
 void Level::DoBroadcastChat(uint64 SenderID, std::string Text)

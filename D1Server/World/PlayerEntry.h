@@ -91,6 +91,20 @@ struct PlayerEntry
 	std::string NameplateText;
 
 	std::weak_ptr<GameServerSession> Session;
+
+	/**
+	 * F8 디버그 시연 카운터 — Handle_C_DEBUG_FORCE_REJECT 가 N(예: 3) 으로 세팅한다.
+	 * DoTryMove 진입 시 양수면 1 감소시키고, 0 으로 내려가는 순간(=N 번째 패킷)을 ValidateMove 결과 무관하게 강제 reject 처리.
+	 * 0 이면 비활성. _DEBUG 빌드 클라이언트만 이 값을 켜며, 영상 촬영용 결정론적 reject 시연을 한 사이클 단위로 발생시킨다.
+	 */
+	uint32 DebugForceRejectCountdown = 0;
+
+	/**
+	 * F8 디버그 시연 동안 서버 cooldown 검사를 일시 면제하는 카운터. 클라가 burst 5 패킷을 즉시 송신해도
+	 * 정상 cooldown reject 가 발동하지 않도록 한다. 매 C_MOVE 도착 시 양수면 cooldown 검사를 skip 하고 1 감소.
+	 * 0 이면 비활성(정상 cooldown 적용). DebugForceRejectCountdown 과 짝을 이뤄 burst 시연 1 회분만 다룬다.
+	 */
+	uint32 DebugCooldownBypassRemaining = 0;
 };
 
 // dbo.PlayerEntry 메타데이터 등록 — 선언 순서 = Schema/PlayerEntry.sql 컬럼 순서와 1:1. 런타임 필드는 미등록으로 자연 제외.

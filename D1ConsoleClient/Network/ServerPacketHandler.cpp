@@ -2,9 +2,10 @@
 #include "Game.h"
 #include "World/UWorld.h"
 #include "GameObject/APlayerActor.h"
-#include "GameObject/APlayerFemaleActor.h"
+#include "GameObject/APlayerSamuraiActor.h"
 #include "GameObject/APlayerDwarfActor.h"
 #include "GameObject/AMonsterActor.h"
+#include "GameObject/ASlimeActor.h"
 #include "UI/UChatPanel.h"
 #include "UI/ULoginWidget.h"
 
@@ -70,10 +71,25 @@ namespace
 		if (World == nullptr) return nullptr;
 		switch (Type)
 		{
-		case Protocol::CT_FEMALE: return World->SpawnActor<APlayerFemaleActor>(PlayerID, TileX, TileY);
+		case Protocol::CT_SAMURAI: return World->SpawnActor<APlayerSamuraiActor>(PlayerID, TileX, TileY);
 		case Protocol::CT_DWARF:  return World->SpawnActor<APlayerDwarfActor>(PlayerID, TileX, TileY);
 		case Protocol::CT_DEFAULT:
 		default:                  return World->SpawnActor<APlayerActor>(PlayerID, TileX, TileY);
+		}
+	}
+
+	/**
+	 * MonsterType 에 따라 적절한 AMonsterActor 파생 클래스를 스폰한다. 반환은 공통 베이스 포인터.
+	 * S_ENTER_GAME(monsters[]) / S_MONSTER_SPAWN 공용 — 종류 분기는 이 1곳에만 존재한다.
+	 * 현재 활성 종류는 슬라임뿐. Minotaur/RedOrc/GreenOrc 는 시각 비율 문제로 일시 비활성 — proto enum 은 호환성 위해 보존.
+	 */
+	std::shared_ptr<AMonsterActor> SpawnMonsterByType(UWorld* World, uint64 MonsterID, int32 TileX, int32 TileY, Protocol::MonsterType Type)
+	{
+		if (World == nullptr) return nullptr;
+		switch (Type)
+		{
+		case Protocol::MT_SLIME:
+		default:                     return World->SpawnActor<ASlimeActor>(MonsterID, TileX, TileY);
 		}
 	}
 }
@@ -177,12 +193,12 @@ bool Handle_S_ENTER_GAME(PacketSessionRef& /*session*/, Protocol::S_ENTER_GAME& 
 			Other->SetNameplateText(Utf8ToWide(Info.nameplate_text()));
 	}
 
-	// 3. 몬스터 스냅샷 — Level 에 존재하는 몬스터를 한 번에 스폰
+	// 3. 몬스터 스냅샷 — Level 에 존재하는 몬스터를 한 번에 스폰. 종류별 파생은 SpawnMonsterByType 한 곳에서만 분기.
 	for (int32 i = 0; i < pkt.monsters_size(); ++i)
 	{
 		const Protocol::MonsterInfo& MI = pkt.monsters(i);
-		World->SpawnActor<AMonsterActor>(MI.monster_id(), MI.tile_x(), MI.tile_y());
-		ScreenLog(L"[Client] S_ENTER_GAME monster id=%llu tile=(%d,%d)", MI.monster_id(), MI.tile_x(), MI.tile_y());
+		SpawnMonsterByType(World, MI.monster_id(), MI.tile_x(), MI.tile_y(), MI.monster_type());
+		ScreenLog(L"[Client] S_ENTER_GAME monster id=%llu tile=(%d,%d) type=%d", MI.monster_id(), MI.tile_x(), MI.tile_y(), static_cast<int>(MI.monster_type()));
 	}
 
 	return true;
@@ -241,14 +257,14 @@ bool Handle_S_MOVE_REJECT(PacketSessionRef& /*session*/, Protocol::S_MOVE_REJECT
 
 bool Handle_S_MONSTER_SPAWN(PacketSessionRef& /*session*/, Protocol::S_MONSTER_SPAWN& pkt)
 {
-	// 서버가 스폰한 몬스터를 월드에 생성한다.
+	// 서버가 스폰한 몬스터를 월드에 생성한다. 종류별 파생은 SpawnMonsterByType 한 곳에서만 분기.
 	Game* Instance = Game::GetInstance();
 	if (Instance == nullptr) return false;
 	UWorld* World = Instance->GetWorld();
 	if (World == nullptr) return false;
 
-	World->SpawnActor<AMonsterActor>(pkt.monster_id(), pkt.tile_x(), pkt.tile_y());
-	ScreenLog(L"[Client] S_MONSTER_SPAWN id=%llu tile=(%d,%d)", pkt.monster_id(), pkt.tile_x(), pkt.tile_y());
+	SpawnMonsterByType(World, pkt.monster_id(), pkt.tile_x(), pkt.tile_y(), pkt.monster_type());
+	ScreenLog(L"[Client] S_MONSTER_SPAWN id=%llu tile=(%d,%d) type=%d", pkt.monster_id(), pkt.tile_x(), pkt.tile_y(), static_cast<int>(pkt.monster_type()));
 	return true;
 }
 

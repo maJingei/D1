@@ -46,7 +46,7 @@ private:
 	static constexpr int32 OffsetX = (-RenderW / 2);
 
 	/** AnchorY 기준 위쪽으로 띄울 픽셀 — 머리 위 배치. */
-	static constexpr int32 OffsetY = 0;
+	static constexpr int32 OffsetY = 25;
 
 	// ---------------------------------------------------------------
 	// 상태

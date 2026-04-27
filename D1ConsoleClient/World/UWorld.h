@@ -13,12 +13,16 @@
 class AActor;
 class UTileMap;
 class UCollisionMap;
+class Texture;
 
 /** 단일 Level 의 정적 리소스 세트 — 시작 시 프리로드되어 CurrentLevelID 에 따라 선택적으로 렌더/충돌 판정된다. */
 struct FLevelAssets
 {
 	std::vector<std::unique_ptr<UTileMap>> TileLayers;
 	std::shared_ptr<UCollisionMap> CollisionMap;
+
+	/** 마일스톤 1: 단일 이미지 렌더 모드용 배경 PNG. LevelUseSingleImage[LevelID]==true 인 슬롯에서만 채워진다. */
+	std::shared_ptr<Texture> BackgroundImage;
 };
 
 /** 게임 오브젝트(AActor) 목록을 소유하고 Tick/Render를 위임하는 월드. */
@@ -39,6 +43,9 @@ public:
 
 	/** 지정 LevelID 의 충돌 맵을 주입한다. */
 	void SetCollisionMap(int32 LevelID, std::shared_ptr<UCollisionMap> InCollisionMap);
+
+	/** 마일스톤 1: 지정 LevelID 의 단일 이미지 모드 배경 텍스처를 주입한다. nullptr 허용(미주입 슬롯). */
+	void SetBackgroundImage(int32 LevelID, std::shared_ptr<Texture> InBackgroundImage);
 
 	/** 현재 활성 Level 의 충돌 맵을 반환한다. 미주입 시 nullptr. */
 	const std::shared_ptr<UCollisionMap>& GetCollisionMap() const { return PerLevel[CurrentLevelID].CollisionMap; }
@@ -61,7 +68,7 @@ public:
 		Actors.push_back(Actor);
 
 		// 매 패킷마다 반복 조회되는 Player/Monster 는 dynamic_cast + 선형 탐색을 피하기 위해 ID 맵에 별도 등록한다.
-		// 파생 클래스(APlayerFemaleActor/APlayerDwarfActor 등) 로 스폰돼도 PlayerMap 에 등록되도록 is_base_of_v 로 확장.
+		// 파생 클래스(APlayerSamuraiActor/APlayerDwarfActor 등) 로 스폰돼도 PlayerMap 에 등록되도록 is_base_of_v 로 확장.
 		if constexpr (std::is_base_of_v<APlayerActor, T>)
 			PlayerMap[Actor->GetPlayerID()] = Actor;
 		else if constexpr (std::is_base_of_v<AMonsterActor, T>)

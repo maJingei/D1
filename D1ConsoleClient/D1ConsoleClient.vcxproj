@@ -213,9 +213,10 @@
     <ClInclude Include="GameObject\AnimActor.h" />
     <ClInclude Include="GameObject\ACharacterActor.h" />
     <ClInclude Include="GameObject\APlayerActor.h" />
-    <ClInclude Include="GameObject\APlayerFemaleActor.h" />
+    <ClInclude Include="GameObject\APlayerSamuraiActor.h" />
     <ClInclude Include="GameObject\APlayerDwarfActor.h" />
     <ClInclude Include="GameObject\AMonsterActor.h" />
+    <ClInclude Include="GameObject\ASlimeActor.h" />
     <ClInclude Include="GameObject\Effect\AEffectActor.h" />
     <ClInclude Include="GameObject\Effect\AHitEffectActor.h" />
     <ClInclude Include="Render\Sprite.h" />

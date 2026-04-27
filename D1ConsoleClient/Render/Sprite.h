@@ -30,6 +30,9 @@ public:
 	/** 직사각형 프레임용 초기화. */
 	void Init(std::shared_ptr<Texture> InTexture, int32 InFrameW, int32 InFrameH);
 
+	/** 현재 클립/프레임/타이머는 유지한 채 백킹 텍스처만 교체한다. 4방향 스프라이트가 방향 전환 시 호출. */
+	void SetTexture(std::shared_ptr<Texture> InTexture) { SpriteTexture = std::move(InTexture); }
+
 	/** 정사각형 출력 크기 설정. RenderW = RenderH = InRenderSize. */
 	void SetRenderSize(int32 InRenderSize) { RenderW = InRenderSize; RenderH = InRenderSize; }
 

@@ -2,6 +2,7 @@
 
 #include "Core/CoreMinimal.h"
 #include "GameObject/AActor.h"
+#include "Protocol.pb.h"
 
 class Level;
 class UCollisionMap;
@@ -33,14 +34,15 @@ class AMonsterActor : public AActor
 {
 public:
 	
-	AMonsterActor(uint64 InMonsterID, int32 InTileX, int32 InTileY, std::shared_ptr<Level> InLevel)
-		: AActor(InTileX, InTileY), ParentLevel(InLevel), MonsterID(InMonsterID)
+	AMonsterActor(uint64 InMonsterID, int32 InTileX, int32 InTileY, std::shared_ptr<Level> InLevel, Protocol::MonsterType InMonsterType)
+		: AActor(InTileX, InTileY), ParentLevel(InLevel), MonsterID(InMonsterID), MonsterType(InMonsterType)
 	{
-		// 기본 스탯으로 초기화. 추후 종족별 스폰 테이블이 생기면 생성자에 인자로 받아 덮어쓴다.
+		// 기본 스탯으로 초기화. MVP 단계에서는 종류와 무관하게 동일 스탯 — 추후 종류별 차별화 시 생성자에서 분기.
 		InitHP(DefaultMaxHP);
 	}
 
 	uint64 GetMonsterID() const { return MonsterID; }
+	Protocol::MonsterType GetMonsterType() const { return MonsterType; }
 	EMonsterState GetState() const { return State; }
 
 	/** 공격자 인스턴스의 데미지 — Level::BroadcastMonsterAttack 이 ApplyDamage 에 전달한다. */
@@ -78,6 +80,9 @@ private:
 	// ---------------------------------------------------------------
 
 	uint64 MonsterID = 0;
+
+	/** 종류 식별. MVP 단계에서는 게임플레이에 영향 없음 — S_MONSTER_SPAWN/MonsterInfo 송신 시 클라 측 스프라이트 분기 키로 사용. */
+	Protocol::MonsterType MonsterType = Protocol::MT_SLIME;
 
 	// ---------------------------------------------------------------
 	// 상태

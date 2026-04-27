@@ -7,7 +7,6 @@ thread_local bool tFlushing = false;
 void JobQueue::PushJob(JobRef&& Job)
 {
 	// 1. ReserveCount 를 먼저 증가시킨다.
-	//    fetch_add 이전 값이 0 이면 이 스레드가 0→1 전환 주체 = 첫 Flush 담당.
 	const int32 PrevCount = ReserveCount.fetch_add(1);
 
 	// 2. Job 을 LockQueue 에 push 한다.
@@ -30,7 +29,6 @@ void JobQueue::PushJob(JobRef&& Job)
 
 void JobQueue::FlushJob()
 {
-	// 이 스레드가 Flush 루프에 있음을 표시한다. 루프 안에서 발생한 재진입 PushJob 이 인라인 sync 경로를 건너뛰고 GlobalJobQueue 경로로 폴백하게 만든다.
 	tFlushing = true;
 
     // Count와 시간으로 스케줄링. 일정 Count가 지나면 JobQueue 스케줄링을 놔버림. 

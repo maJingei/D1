@@ -69,6 +69,27 @@ void ACharacterActor::BeginAttack()
 
 void ACharacterActor::BeginMoveTo(int32 NextTileX, int32 NextTileY)
 {
+	// CurrentFacing 갱신 — TilePos 가 갱신되기 전(=이전 타일 좌표) 의 차분으로 4방향 결정.
+	// 우선순위: 세로 이동 > 가로 이동 (대각 입력은 들어오지 않으므로 실제로 둘 중 하나만 0 이 아님).
+	const int32 OldTileX = static_cast<int32>(TilePos.X);
+	const int32 OldTileY = static_cast<int32>(TilePos.Y);
+	if (NextTileY < OldTileY)
+	{
+		CurrentFacing = ECharacterFacing::Up;
+	}
+	else if (NextTileY > OldTileY)
+	{
+		CurrentFacing = ECharacterFacing::Down;
+	}
+	else if (NextTileX < OldTileX)
+	{
+		CurrentFacing = ECharacterFacing::Left;
+	}
+	else if (NextTileX > OldTileX)
+	{
+		CurrentFacing = ECharacterFacing::Right;
+	}
+
 	TilePos = { static_cast<float>(NextTileX), static_cast<float>(NextTileY) };
 	TargetPos = TilePos * static_cast<float>(TileSize);
 	bIsMoving = true;

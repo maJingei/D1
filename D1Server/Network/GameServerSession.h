@@ -36,6 +36,9 @@ public:
 	/** DB 워커가 로그인 확정 시 1회 기록. proto string 그대로 복사. */
 	void SetAccountId(const std::string& InId) { AccountId = InId; }
 
+	/** 송신 hook — 봇 테스트 가시성을 위해 패킷명/Player/Level 을 stdout 에 1줄 로깅 후 base 호출. */
+	void Send(SendBufferRef InSendBuffer) override;
+
 protected:
 	void OnRecvPacket(BYTE* Buffer, int32 Len) override;
 	void OnDisconnected() override;

@@ -3,7 +3,7 @@
 #include "Render/ResourceManager.h"
 #include "Render/Sprite.h"
 
-AMonsterActor::AMonsterActor(uint64 InMonsterID, int32 InTileX, int32 InTileY)
+AMonsterActor::AMonsterActor(uint64 InMonsterID, int32 InTileX, int32 InTileY, const FMonsterSpriteConfig& InConfig)
 	: MonsterID(InMonsterID)
 {
 	// 초기 타일 좌표로 즉시 워프.
@@ -12,15 +12,19 @@ AMonsterActor::AMonsterActor(uint64 InMonsterID, int32 InTileX, int32 InTileY)
 	// 이동 속도 주입.
 	MoveSpeed = MonsterMoveSpeed;
 
-	// 스프라이트 초기화 — Mini Golem 시트.
-	ActorSprite = std::make_shared<Sprite>();
-	auto Texture = ResourceManager::Get().GetTexture(L"MiniGolemSprite");
-	ActorSprite->Init(Texture, TileSize);
-	ActorSprite->SetRenderSize(RenderSize);
+	// 공격 1사이클 길이 캐싱 — 클립 프레임 수가 종류별로 다르므로 ctor 시점에 1회 계산.
+	AttackDuration = static_cast<float>(InConfig.AttackClip.Frames) / InConfig.AttackClip.Fps;
 
-	ActorSprite->AddClip(static_cast<int32>(EAnimClip::Idle),   { IdleClip.Row,   IdleClip.Frames,   IdleClip.Fps });
-	ActorSprite->AddClip(static_cast<int32>(EAnimClip::Walk),   { WalkClip.Row,   WalkClip.Frames,   WalkClip.Fps });
-	ActorSprite->AddClip(static_cast<int32>(EAnimClip::Attack), { AttackClip.Row, AttackClip.Frames, AttackClip.Fps });
+	// 스프라이트 초기화 — Config 로 받은 텍스처/셀크기/출력크기/클립 레이아웃을 그대로 적용.
+	// FrameSize 는 시트별로 다름(32/128/256). TileSize/RenderSize 베이스 상수가 아닌 Config 값을 따른다.
+	ActorSprite = std::make_shared<Sprite>();
+	auto Texture = ResourceManager::Get().GetTexture(InConfig.TextureName);
+	ActorSprite->Init(Texture, InConfig.FrameSize);
+	ActorSprite->SetRenderSize(InConfig.RenderSize);
+
+	ActorSprite->AddClip(static_cast<int32>(EAnimClip::Idle),   { InConfig.IdleClip.Row,   InConfig.IdleClip.Frames,   InConfig.IdleClip.Fps });
+	ActorSprite->AddClip(static_cast<int32>(EAnimClip::Walk),   { InConfig.WalkClip.Row,   InConfig.WalkClip.Frames,   InConfig.WalkClip.Fps });
+	ActorSprite->AddClip(static_cast<int32>(EAnimClip::Attack), { InConfig.AttackClip.Row, InConfig.AttackClip.Frames, InConfig.AttackClip.Fps });
 	ActorSprite->SetClipId(static_cast<int32>(EAnimClip::Idle));
 }
 

@@ -27,8 +27,16 @@ message S_LOGIN {
 // 플레이어 코스메틱 캐릭터 종류. 스탯/행동 동일, 스프라이트만 다름. 서버가 입장 시 자동 배정한다.
 enum CharacterType {
 	CT_DEFAULT = 0;
-	CT_FEMALE  = 1;
+	CT_SAMURAI = 1;
 	CT_DWARF   = 2;
+}
+
+// 몬스터 종류. 스탯/행동 동일(MVP), 스프라이트 시트만 다름. LevelConfig.h::Level{N}Monsters[] 가 어떤 종류를 어디 스폰할지 정의한다.
+enum MonsterType {
+	MT_SLIME      = 0;
+	MT_MINOTAUR   = 1;
+	MT_RED_ORC    = 2;
+	MT_GREEN_ORC  = 3;
 }
 
 // 필드의 다른 플레이어 스냅샷. S_ENTER_GAME 응답에 기존 접속자 목록으로 내려간다.
@@ -47,6 +55,7 @@ message MonsterInfo {
 	uint64 monster_id = 1;
 	int32  tile_x     = 2;
 	int32  tile_y     = 3;
+	MonsterType monster_type = 4;
 }
 
 // Client -> Server: 필드 입장 요청. 현 스코프에서는 Session 기반으로 서버가 PlayerID를 발급하므로 payload는 비워 둔다(향후 확장용).
@@ -119,6 +128,7 @@ message S_MONSTER_SPAWN {
 	uint64 monster_id = 1;
 	int32  tile_x     = 2;
 	int32  tile_y     = 3;
+	MonsterType monster_type = 4;
 }
 
 // Server -> Client: 몬스터 이동 확정 브로드캐스트. 서버가 A*로 결정한 다음 타일로 이동할 때 송신한다.
@@ -192,4 +202,13 @@ message C_CHAT {
 message S_CHAT {
 	uint64 sender_id = 1;
 	string text      = 2;
+}
+
+// Client -> Server: [_DEBUG 전용] F8 디버그 시연 — 다음 N 번째 C_MOVE 를 ValidateMove 결과와 무관하게 강제 reject.
+// 클라가 burst 로 5 패킷을 즉시 송신하므로 서버 cooldown 검증은 cooldown_bypass_count 만큼 일시 면제하여
+// 정상 cooldown reject 가 시연 시퀀스를 오염시키지 않도록 한다. reject_at_nth_packet 은 그 burst 안에서 1-based 인덱스.
+// 두 값 모두 0 이면 비활성. 영상 촬영용이라 1 회성 트리거(자동 종료)로 운영된다.
+message C_DEBUG_FORCE_REJECT {
+	uint32 reject_at_nth_packet = 1;
+	uint32 cooldown_bypass_count = 2;
 }

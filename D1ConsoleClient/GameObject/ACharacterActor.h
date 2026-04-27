@@ -11,6 +11,9 @@ struct FSpriteClipInfo
 	float Fps;
 };
 
+/** 캐릭터의 4방향 시야 방향. 신규 4방향 멀티파일 스프라이트 시스템(PlayerSprite Directional 모드)에서 텍스처 선택에 사용된다. legacy 단일 시트 모드(Female/Dwarf/Monster)에서는 bFacingLeft 가 좌/우 미러링을 담당하므로 이 값은 참조되지 않는다. */
+enum class ECharacterFacing : int32 { Down = 0, Left = 1, Right = 2, Up = 3 };
+
 /** 월드에 실존하는 이동/전투 가능한 캐릭터 공용 베이스. */
 class ACharacterActor : public AnimActor
 {
@@ -53,8 +56,8 @@ protected:
 	/** 지정 타일로 즉시 워프 (보간 없음). */
 	void WarpTo(int32 TileX, int32 TileY);
 
-	/** 상태 우선순위 Attack > Walk > Idle 에 따라 Sprite 클립 전환. */
-	void UpdateAnimationState();
+	/** 상태 우선순위 Attack > Walk > Idle 에 따라 Sprite 클립 전환. 파생이 입력 기반 등으로 더 정교한 결정을 하려면 override. */
+	virtual void UpdateAnimationState();
 
 	/** 이동 타일 보간. 목표 도달 시 bIsMoving=false. */
 	void UpdateMovement(float DeltaTime);
@@ -72,8 +75,11 @@ protected:
 	/** 타일 간 이동 보간 중 여부. */
 	bool bIsMoving = false;
 
-	/** 좌향 이동 시 true — Sprite 수평 반전. */
+	/** 좌향 이동 시 true — Sprite 수평 반전. legacy 단일 시트 모드 전용. */
 	bool bFacingLeft = false;
+
+	/** 4방향 시야 방향. BeginMoveTo 가 이전/다음 타일 델타로 자동 갱신. Idle/Attack 중에는 마지막 이동 방향이 유지된다. PlayerSprite Directional 모드가 텍스처 선택에 사용. */
+	ECharacterFacing CurrentFacing = ECharacterFacing::Down;
 
 	/** 공격 애니메이션 재생 중. */
 	bool bIsAttacking = false;

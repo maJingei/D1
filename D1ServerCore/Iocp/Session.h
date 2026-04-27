@@ -31,8 +31,8 @@ public:
 	/** WSARecv를 등록하여 수신 대기를 시작한다. */
 	void RegisterRecv();
 
-	/** SendBuffer 송신 예약. 내부 SendLock 보호 하에 즉시 DoSend 본문을 실행한다. */
-	void Send(SendBufferRef InSendBuffer);
+	/** SendBuffer 송신 예약. 내부 SendLock 보호 하에 즉시 DoSend 본문을 실행한다. 파생 클래스 로깅 hook 용 virtual. */
+	virtual void Send(SendBufferRef InSendBuffer);
 
 	/** ConnectEx를 호출하여 서버에 연결한다. (클라이언트 측) */
 	void RegisterConnect(const NetAddress& Address);

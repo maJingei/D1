@@ -26,7 +26,7 @@ bool World::Init(const std::string& ResourceBaseDir)
 	bool bAllLoaded = true;
 	for (int32 i = 0; i < LEVEL_COUNT; i++)
 	{
-		const std::string LevelCsvPath = ResourceBaseDir + LevelFolders[i] + "\\Collision_Collision.csv";
+		const std::string LevelCsvPath = ResourceBaseDir + LevelFolders[i] + "\\" + LevelCollisionFiles[i];
 		Levels[i] = std::make_shared<Level>();
 		Levels[i]->Init(LevelCsvPath, i, LevelPortalConfigs[i]);
 	}

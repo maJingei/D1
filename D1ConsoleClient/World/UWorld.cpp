@@ -1,8 +1,11 @@
 #include "UWorld.h"
 #include "UTileMap.h"
 #include "UCollisionMap.h"
+#include "Render/Texture.h"
 
 #include "GameObject/AActor.h"
+
+#include <gdiplus.h>
 
 #include <algorithm>
 
@@ -19,10 +22,18 @@ void UWorld::Tick(float DeltaTime)
 
 void UWorld::Render(HDC BackDC)
 {
-	// 1. 현재 활성 Level 의 배경 타일 레이어를 순서대로 그린다 (Ground → Wall → Water → Actor 순)
-	for (const std::unique_ptr<UTileMap>& Layer : PerLevel[CurrentLevelID].TileLayers)
+	// 1. 배경 렌더 — 모든 Level 이 단일 이미지 모드. PNG 한 장을 (0,0) 에 통째로 그린다.
+	//    (마일스톤 1 에서 사용하던 LevelUseSingleImage 분기와 3-레이어 TileLayers 경로는 제거됨.)
+	const std::shared_ptr<Texture>& BackgroundImage = PerLevel[CurrentLevelID].BackgroundImage;
+	if (BackgroundImage != nullptr)
 	{
-		Layer->Render(BackDC);
+		Gdiplus::Bitmap* BackgroundBitmap = BackgroundImage->GetBitmap();
+		if (BackgroundBitmap != nullptr)
+		{
+			Gdiplus::Graphics G(BackDC);
+			G.SetPageUnit(Gdiplus::UnitPixel);
+			G.DrawImage(BackgroundBitmap, 0, 0, static_cast<INT>(BackgroundBitmap->GetWidth()), static_cast<INT>(BackgroundBitmap->GetHeight()));
+		}
 	}
 
 	// 2. GameObject 렌더
@@ -44,6 +55,15 @@ void UWorld::SetCollisionMap(int32 LevelID, std::shared_ptr<UCollisionMap> InCol
 	if (LevelID < 0 || LevelID >= LEVEL_COUNT)
 		return;
 	PerLevel[LevelID].CollisionMap = std::move(InCollisionMap);
+}
+
+void UWorld::SetBackgroundImage(int32 LevelID, std::shared_ptr<Texture> InBackgroundImage)
+{
+	if (LevelID < 0 || LevelID >= LEVEL_COUNT)
+	{
+		return;
+	}
+	PerLevel[LevelID].BackgroundImage = std::move(InBackgroundImage);
 }
 
 void UWorld::SetCurrentLevelID(int32 InLevelID)

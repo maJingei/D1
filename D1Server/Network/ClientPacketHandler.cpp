@@ -26,6 +26,35 @@ namespace
 	}
 }
 
+const char* GetPacketName(uint16 PacketId)
+{
+	switch (PacketId)
+	{
+		case PKT_C_LOGIN: return "C_LOGIN";
+		case PKT_S_LOGIN: return "S_LOGIN";
+		case PKT_C_ENTER_GAME: return "C_ENTER_GAME";
+		case PKT_S_ENTER_GAME: return "S_ENTER_GAME";
+		case PKT_S_SPAWN: return "S_SPAWN";
+		case PKT_C_MOVE: return "C_MOVE";
+		case PKT_S_MOVE: return "S_MOVE";
+		case PKT_S_MOVE_REJECT: return "S_MOVE_REJECT";
+		case PKT_S_MONSTER_SPAWN: return "S_MONSTER_SPAWN";
+		case PKT_S_MONSTER_MOVE: return "S_MONSTER_MOVE";
+		case PKT_S_MONSTER_ATTACK: return "S_MONSTER_ATTACK";
+		case PKT_S_PLAYER_DAMAGED: return "S_PLAYER_DAMAGED";
+		case PKT_S_PLAYER_DIED: return "S_PLAYER_DIED";
+		case PKT_C_ATTACK: return "C_ATTACK";
+		case PKT_S_MONSTER_DAMAGED: return "S_MONSTER_DAMAGED";
+		case PKT_S_MONSTER_DIED: return "S_MONSTER_DIED";
+		case PKT_S_PORTAL_TELEPORT: return "S_PORTAL_TELEPORT";
+		case PKT_S_PLAYER_LEFT: return "S_PLAYER_LEFT";
+		case PKT_S_PLAYER_ATTACK: return "S_PLAYER_ATTACK";
+		case PKT_C_CHAT: return "C_CHAT";
+		case PKT_S_CHAT: return "S_CHAT";
+		default: return nullptr;
+	}
+}
+
 bool Handle_INVALID(PacketSessionRef& /*session*/, BYTE* buffer, int32 /*len*/)
 {
 	PacketHeader* header = reinterpret_cast<PacketHeader*>(buffer);
@@ -52,7 +81,8 @@ bool Handle_C_LOGIN(PacketSessionRef& session, Protocol::C_LOGIN& pkt)
 
 		PlayerEntry Entry;
 		Entry.PlayerID = NewPlayerID;
-		Entry.CharacterType = static_cast<Protocol::CharacterType>(NewPlayerID % 3);
+		// 봇은 식별을 쉽게 하기 위해 항상 사무라이 스프라이트로 고정.
+		Entry.CharacterType = Protocol::CT_SAMURAI;
 		Entry.LevelID = static_cast<int32>(NewPlayerID % static_cast<uint64>(LEVEL_COUNT));
 		const auto& Walkables = World::GetInstance().GetLevel(Entry.LevelID)->WalkableTiles;
 		if (Walkables.empty() == false)
@@ -90,9 +120,10 @@ bool Handle_C_LOGIN(PacketSessionRef& session, Protocol::C_LOGIN& pkt)
 		auto& Accounts = Ctx.Set<Account>();
 		auto& Players = Ctx.Set<PlayerEntry>();
 
-		// DBSet<T>::Find 는 T* (nullptr = 행 없음) 반환. Identified 맵이 소유, 여기서는 non-owning ptr.
-		// Account* AccPtr = Accounts.Find(Id);
-		Account* AccPtr = Accounts.Where(AccountCol::Id == Id.c_str()).SingleOrDefault();
+		Account* AccPtr = Accounts
+						.Where(AccountCol::Id == Id.c_str())
+						.SingleOrDefault();
+		
 		PlayerEntry Entry;
 		if (AccPtr != nullptr)
 		{
@@ -102,7 +133,8 @@ bool Handle_C_LOGIN(PacketSessionRef& session, Protocol::C_LOGIN& pkt)
 				SendLoginResult(GameSession, Protocol::LR_INVALID_CREDENTIALS);
 				return;
 			}
-			PlayerEntry* EntryPtr = Players.Find(static_cast<uint64>(AccPtr->PlayerID));
+			// PlayerEntry* EntryPtr = Players.Find(static_cast<uint64>(AccPtr->PlayerID));
+			PlayerEntry* EntryPtr = Players.Where(PlayerEntryCol::PlayerID == (AccPtr->PlayerID)).SingleOrDefault();
 			if (EntryPtr == nullptr)
 			{
 				SendLoginResult(GameSession, Protocol::LR_DB_ERROR);
@@ -112,6 +144,8 @@ bool Handle_C_LOGIN(PacketSessionRef& session, Protocol::C_LOGIN& pkt)
 			Entry = *EntryPtr;
 			// 사람 nameplate = 로그인 시 입력한 Account.Id 그대로. NameplateText 는 DB 미매핑이라 직접 채워준다.
 			Entry.NameplateText = Id;
+			// 사람 클라는 봇(CT_SAMURAI)과 시각적으로 구분되도록 신규 4방향 PlayerSprite(CT_DEFAULT) 사용. (DB 값 무시)
+			Entry.CharacterType = Protocol::CT_DEFAULT;
 		}
 		else
 		{
@@ -128,7 +162,8 @@ bool Handle_C_LOGIN(PacketSessionRef& session, Protocol::C_LOGIN& pkt)
 			// 신규 PlayerEntry 기본 스폰 구성 — WalkableTiles 에서 결정론적 위치 선택.
 			auto NewEntry = std::make_shared<PlayerEntry>();
 			NewEntry->PlayerID = NewPlayerID;
-			NewEntry->CharacterType = static_cast<Protocol::CharacterType>(NewPlayerID % 3);
+			// 사람 클라는 봇(CT_SAMURAI)과 시각적으로 구분되도록 신규 4방향 PlayerSprite(CT_DEFAULT) 사용.
+			NewEntry->CharacterType = Protocol::CT_DEFAULT;
 			NewEntry->LevelID = static_cast<int32>(NewPlayerID % static_cast<uint64>(LEVEL_COUNT));
 			const auto& Walkables = World::GetInstance().GetLevel(NewEntry->LevelID)->WalkableTiles;
 			if (Walkables.empty() == false)
@@ -212,6 +247,31 @@ bool Handle_C_ATTACK(PacketSessionRef& session, Protocol::C_ATTACK& /*pkt*/)
 		return true;
 
 	World::GetInstance().GetLevel(LevelID)->DoAsync(&Level::DoTryAttack, PlayerID);
+	return true;
+}
+
+bool Handle_C_DEBUG_FORCE_REJECT(PacketSessionRef& session, Protocol::C_DEBUG_FORCE_REJECT& pkt)
+{
+#ifdef _DEBUG
+	auto GameSession = std::static_pointer_cast<GameServerSession>(session);
+	const uint64 PlayerID = GameSession->GetPlayerID();
+	if (PlayerID == 0)
+	{
+		return false;
+	}
+
+	const int32 LevelID = GameSession->GetLevelID();
+	if (LevelID < 0)
+	{
+		return true;
+	}
+
+	// 카운터 세팅은 PlayerEntry 를 만지므로 Level JobQueue 직렬화 안에서 수행해야 한다 — 동일 프레임에 도착하는 후속 C_MOVE 와 동일한 Job 큐를 공유.
+	World::GetInstance().GetLevel(LevelID)->DoAsync(&Level::DoSetDebugForceReject, PlayerID, pkt.reject_at_nth_packet(), pkt.cooldown_bypass_count());
+#else
+	(void)session;
+	(void)pkt;
+#endif
 	return true;
 }
 

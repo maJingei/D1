@@ -30,6 +30,7 @@ enum : uint16
 	PKT_S_PLAYER_ATTACK = 1018,
 	PKT_C_CHAT = 1019,
 	PKT_S_CHAT = 1020,
+	PKT_C_DEBUG_FORCE_REJECT = 1021,
 };
 
 // Custom Handlers
@@ -39,6 +40,7 @@ bool Handle_C_ENTER_GAME(PacketSessionRef& session, Protocol::C_ENTER_GAME& pkt)
 bool Handle_C_MOVE(PacketSessionRef& session, Protocol::C_MOVE& pkt);
 bool Handle_C_ATTACK(PacketSessionRef& session, Protocol::C_ATTACK& pkt);
 bool Handle_C_CHAT(PacketSessionRef& session, Protocol::C_CHAT& pkt);
+bool Handle_C_DEBUG_FORCE_REJECT(PacketSessionRef& session, Protocol::C_DEBUG_FORCE_REJECT& pkt);
 
 class ClientPacketHandler
 {
@@ -52,6 +54,7 @@ public:
 		GPacketHandler[PKT_C_MOVE] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::C_MOVE>(Handle_C_MOVE, session, buffer, len); };
 		GPacketHandler[PKT_C_ATTACK] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::C_ATTACK>(Handle_C_ATTACK, session, buffer, len); };
 		GPacketHandler[PKT_C_CHAT] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::C_CHAT>(Handle_C_CHAT, session, buffer, len); };
+		GPacketHandler[PKT_C_DEBUG_FORCE_REJECT] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::C_DEBUG_FORCE_REJECT>(Handle_C_DEBUG_FORCE_REJECT, session, buffer, len); };
 	}
 
 	static bool HandlePacket(PacketSessionRef& session, BYTE* buffer, int32 len)
